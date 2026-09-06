@@ -1,0 +1,58 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>Beyond Mean Fields</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,300..800&family=JetBrains+Mono:wght@400;600&family=Cinzel:wght@500;700&display=swap">
+<link rel="stylesheet" href="/src/style.css"></head>
+<body>
+<div id="loading"><div class="t">Beyond <em>Mean Fields</em></div><div class="bar"><i id="loadbar"></i></div><div class="s" id="loadtxt">loading assets…</div></div>
+<canvas id="c" tabindex="0" aria-label="Beyond Mean Fields game view"></canvas>
+
+<div class="hud" id="hud" hidden>
+  <div class="corner tl">
+    <div class="lab">zone</div>
+    <div class="zone" id="zone">Input Harbor</div>
+    <div class="stat"><span class="lab">HP</span><div class="bar hp"><i id="hpbar"></i></div><span id="hpval">100</span></div>
+    <div class="stat"><span class="lab">XP</span><div class="bar xp"><i id="xpbar"></i></div><span id="xpval">lvl 1</span></div>
+    <div class="stat"><span class="lab">Mana</span><div class="bar mana"><i id="manabar"></i></div><span id="manaval">100</span></div>
+  </div>
+  <div class="corner tr">
+    <div class="tracker">
+      <div class="lab">quest</div>
+      <div class="q" id="qtitle">—</div>
+      <div class="o" id="qobj">—</div>
+      <canvas id="compass" width="88" height="88" aria-hidden="true"></canvas>
+    </div>
+    <div class="items" id="items"></div>
+  </div>
+  <div class="keys" id="keys">
+    click the ground to walk (double-click runs) · click people, creatures and objects to use them · right-click a creature to cast the selected spell · drag to look · <kbd>C</kbd> mouse steering<br>
+    <kbd>E</kbd> talk / pick up · <kbd>F</kbd> or click: Hartree–Fock staff · <kbd>1</kbd>–<kbd>9</kbd> cast spells · <kbd>Tab</kbd> spellbook · <kbd>J</kbd> quests · <kbd>Esc</kbd> menu
+  </div>
+  <div id="hotbar"></div>
+  <div id="enc" hidden>
+    <div class="row1"><span class="nm" id="encname">—</span><span class="fm" id="encformula"></span></div>
+    <div class="tells" id="enctells"></div>
+    <div class="bar hp"><i id="enchp"></i></div>
+    <div class="res" id="encres"></div>
+  </div>
+</div>
+<div id="bossbar" hidden><div class="lab" id="bossname">The Non-Convergent</div><div class="bar"><i id="bosshp"></i></div></div>
+<div id="prompt"></div>
+<div id="crosshair" hidden></div>
+<div id="toast"></div>
+<div id="stick"><i></i></div>
+<button id="tAttack" class="btn-touch" type="button">STAFF</button>
+<button id="tAct" class="btn-touch" type="button">TALK</button>
+<button id="tBolt" class="btn-touch" type="button">BOLT</button>
+
+<div id="dlg" hidden>
+  <div class="who"><span class="sw" id="dsw"></span><span class="name" id="dname"></span></div>
+  <div class="text" id="dtext"></div>
+  <pre id="dcode"></pre>
+  <div class="choices" id="dchoices"></div>
+  <div class="next" id="dnext"></div>
+</div>
+
+<div id="overlay"><div class="panel" id="panel"><div id="fatal" hidden>The 3D library did not load. Check the connection and reload the page.</div></div></div>
+<script type="module" src="/src/main.js"></script>
+</body></html>

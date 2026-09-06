@@ -1,0 +1,11 @@
+node_modules/
+shots/
+dist/
+*.log
+# raw Poly Haven sources are recreated by `npm run fetch`; only the decimated .glb files, textures and HDRI are committed
+public/assets/models/*/*.bin
+public/assets/models/*/*.gltf
+public/assets/models/*/textures/
+public/assets/models/fir_tree_01/
+public/assets/models/pine_tree_01/
+public/assets/models/jacaranda_tree/
