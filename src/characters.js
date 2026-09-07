@@ -167,6 +167,7 @@ export function createPlayerController(character, cam, keys, input, stick) {
 export function createCamera(camera) {
   const cam = { yaw: 0, pitch: 0.3, dist: 6.5, dragT: 0, pos: new THREE.Vector3(), shake: 0, fov: 52 };
   cam.update = (dt, P) => {
+    if (cam.free) { camera.position.copy(cam.free.pos); camera.lookAt(cam.free.target); return; }   // development: a fixed free camera (__dbg.freeCam)
     if (cam.manual) { /* mouse steering: the mouse owns the yaw */ }
     else if (cam.dragT > 0) cam.dragT -= dt;
     else if (P.moving) { let d = P.c.heading + Math.PI - cam.yaw; d = Math.atan2(Math.sin(d), Math.cos(d)); cam.yaw += d * Math.min(1, dt * 1.4); }

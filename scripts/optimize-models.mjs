@@ -11,18 +11,16 @@ import { existsSync, statSync, readFileSync } from 'node:fs';
 const ROOT = new URL('../public/assets/models/', import.meta.url).pathname;
 // target triangle counts (approximate) and texture size
 export const BUDGET = {
-  pine_tree_01: [45000, 1024], fir_tree_01: [45000, 1024], jacaranda_tree: [45000, 1024], tree_small_02: [40000, 1024], island_tree_01: [40000, 1024], island_tree_02: [36000, 1024],
-  fir_sapling_medium: [50000, 1024], pine_sapling_small: [22000, 1024], shrub_01: [2000, 512], shrub_03: [1800, 512], fern_02: [1800, 512], grass_medium_01: [700, 512], grass_medium_02: [350, 512], flower_gazania: [1500, 512],
-  dead_tree_trunk: [5000, 512], tree_stump_01: [4000, 512], boulder_01: [3000, 1024], rock_moss_set_01: [6000, 1024], namaqualand_boulder_02: [3500, 1024], coast_rocks_02: [10000, 1024], stone_01: [1500, 512],
+  // (trees, shrubs, ferns and flowers are the Quaternius kit now, see convert-kit.mjs)
+  grass_medium_01: [700, 512], grass_medium_02: [350, 512], tree_stump_01: [4000, 512], boulder_01: [3000, 1024], rock_moss_set_01: [6000, 1024], namaqualand_boulder_02: [3500, 1024], coast_rocks_02: [10000, 1024], stone_01: [1500, 512],
   rock_face_01: [8000, 1024], coastal_cliff_02: [30000, 1024], modular_wooden_pier: [10000, 1024], ship_pinnace: [25000, 1024], wooden_barrels_01: [4000, 512], wine_barrel_01: [3000, 512],
   wooden_crate_01: [1500, 512], wooden_bucket_01: [1200, 512], wooden_lantern_01: [2500, 512], Lantern_01: [3000, 512], street_lamp_01: [4000, 512], treasure_chest: [4000, 512], stone_fire_pit: [2500, 512],
   modular_fort_01: [15000, 1024], large_castle_door: [4000, 1024], WoodenTable_01: [1000, 512], wooden_stool_01: [1200, 512], painted_wooden_bench: [800, 512], planter_box_01: [1500, 512], wooden_ladder: [2000, 512],
   chemistry_set: [6000, 512], bunsen_burner: [2000, 512], vintage_microscope: [4000, 512], book_encyclopedia_set_01: [6000, 512], cannon_01: [5000, 512], garden_gnome: [3000, 512],
 };
-const LOD = new Set(['tree_small_02', 'island_tree_01', 'island_tree_02', 'fir_sapling_medium', 'pine_sapling_small', 'shrub_01', 'shrub_03', 'fern_02', 'boulder_01', 'rock_moss_set_01', 'coast_rocks_02', 'namaqualand_boulder_02', 'rock_face_01', 'flower_gazania']);
+const LOD = new Set(['boulder_01', 'rock_moss_set_01', 'coast_rocks_02', 'namaqualand_boulder_02', 'rock_face_01']);
 // far-LOD triangle budgets (instances beyond lodNear use these; they never cast shadows)
-const LOD_TRIS = { fir_sapling_medium: 7000, pine_sapling_small: 3000, island_tree_01: 6000, island_tree_02: 6000, tree_small_02: 6000, shrub_01: 450, shrub_03: 450, fern_02: 450,
-  boulder_01: 700, rock_moss_set_01: 1200, coast_rocks_02: 2000, namaqualand_boulder_02: 700, rock_face_01: 1600, flower_gazania: 450 };
+const LOD_TRIS = { boulder_01: 700, rock_moss_set_01: 1200, coast_rocks_02: 2000, namaqualand_boulder_02: 700, rock_face_01: 1600 };
 /**
  * Alpha-cut foliage textures carry black (or garbage) colour under their transparent texels; mip filtering blends it into the
  * leaf edges as a dark halo and far trees turn into speckled sticks. Bleeding the mean leaf colour into those texels removes it.

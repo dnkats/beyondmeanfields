@@ -23,6 +23,11 @@ const GradeShader = {
     }`,
 };
 import { loadHDRI, loadPBR, loadGLTF, loadModel, loadTexture, prepareModel, pbrMaterial } from './assets.js';
+import { bakeImpostor, impostorMaterial, impostorGeometry } from './impostor.js';
+let RENDERER = null, SCENE_FOG = null;
+export const IMPOSTORS = {};   // name -> baked atlas, for inspection
+/** The renderer is needed at build time to bake impostor atlases. */
+export function setRenderer(r) { RENDERER = r; }
 
 export const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
 export const lerp = (a, b, t) => a + (b - a) * t;
@@ -284,14 +289,16 @@ const LOD_GROUPS = [];
  * Instances `parts` at `placements`, split into spatial cells so frustum culling works per cell, with an optional
  * low-detail `lodParts` set for distant cells (switched in updateLOD). `cullOnly` groups (grass) simply vanish beyond the near range.
  */
-export function scatterParts(scene, parts, placements, { shadows = true, lodParts = null, cell = 34, cullOnly = false, collide = 0, field = null, name = '' } = {}) {
+export function scatterParts(scene, parts, placements, { shadows = true, lodParts = null, cell = 30, cullOnly = false, collide = 0, field = null, name = '', impostor = null } = {}) {
   if (collide) for (const pl of placements) addCircle(pl.x, pl.z, collide * pl.s);
   if (field) for (const pl of placements) addField(field, pl.x, pl.z, pl.rot, pl.s, pl.y);
   const cells = new Map();
   for (const pl of placements) { const key = `${Math.floor(pl.x / cell)}_${Math.floor(pl.z / cell)}`; if (!cells.has(key)) cells.set(key, []); cells.get(key).push(pl); }
   const meshes = [];
+  const impMat = impostor ? impostorMaterial(impostor, SCENE_FOG) : null;
   for (const list of cells.values()) {
     const center = new THREE.Vector3(); list.forEach((p) => center.add(new THREE.Vector3(p.x, p.y, p.z))); center.multiplyScalar(1 / list.length);
+    let radius = 0; for (const p of list) radius = Math.max(radius, Math.hypot(p.x - center.x, p.z - center.z));   // LOD distance is measured to the nearest tree of the cell, not its centre
     const mk = (partList, castShadow) => partList.map((part) => { const im = new THREE.InstancedMesh(part.geometry, part.material, list.length);
       list.forEach((pl, i) => { _p.set(pl.x, pl.y, pl.z); _q.setFromAxisAngle(UP, pl.rot); _s.setScalar(pl.s); _m.compose(_p, _q, _s); im.setMatrixAt(i, _m); });
       im.castShadow = castShadow; im.receiveShadow = true; im.computeBoundingSphere(); im.name = name; im.userData.lod = partList === lodParts; scene.add(im); meshes.push(im); return im; });
@@ -302,16 +309,23 @@ export function scatterParts(scene, parts, placements, { shadows = true, lodPart
     if (far) far.forEach((m) => (m.visible = false));
     let shadowProxy = null;
     if (proxy) { shadowProxy = mk(lodParts.map((part) => ({ geometry: part.geometry, material: shadowProxyMaterial(part.material) })), true); shadowProxy.forEach((m) => { m.receiveShadow = false; m.userData.proxy = true; }); }
-    LOD_GROUPS.push({ center, near, far, cullOnly, shadowProxy });
+    let imp = null;
+    if (impMat) { imp = mk([{ geometry: impostorGeometry, material: impMat }], false); imp.forEach((m) => { m.visible = false; m.receiveShadow = false; m.userData.impostor = true; }); }
+    LOD_GROUPS.push({ center, radius, near, far, imp, cullOnly, shadowProxy });
   }
   return meshes;
 }
-export function updateLOD(camPos, nearDist, farDist) {
+/**
+ * Three levels per cell, by distance to the nearest instance of the cell: full mesh below nearDist, the decimated LOD mesh to
+ * farDist, a billboard impostor to impDist (when the type has one), nothing beyond. `cullOnly` groups (grass) simply vanish.
+ */
+export function updateLOD(camPos, nearDist, farDist, impDist = farDist) {
   for (const g of LOD_GROUPS) {
-    const d = g.center.distanceTo(camPos), isNear = d < nearDist;
+    const d = Math.max(0, g.center.distanceTo(camPos) - g.radius), isNear = d < nearDist;
     const nearVisible = isNear || (!g.far && d < (g.cullOnly ? nearDist * 1.25 : farDist));
     for (const m of g.near) m.visible = nearVisible;
     if (g.far) { const v = !isNear && d < farDist; for (const m of g.far) m.visible = v; }
+    if (g.imp) { const v = d >= farDist && d < impDist; for (const m of g.imp) m.visible = v; }
     if (g.shadowProxy) for (const m of g.shadowProxy) m.visible = isNear;   // far cells show the LOD itself, which does not cast
   }
 }
@@ -331,14 +345,17 @@ export function cameraBlocked(x, y, z) {
   for (const b of COLLIDERS.boxes) { const dx = x - b.x, dz = z - b.z, lx = dx * b.c - dz * b.s, lz = dx * b.s + dz * b.c; if (Math.abs(lx) < b.hw + 0.3 && Math.abs(lz) < b.hd + 0.3 && y < terrainH(x, z) + 4.5) return true; }
   return rockH(x, z) > y - 0.3;
 }
-export async function scatterModel(scene, name, placements, { foliage = false, shadows = true, envMapIntensity = 0.8, cullOnly = false, collide = 0, field = false } = {}) {
+export async function scatterModel(scene, name, placements, { foliage = false, shadows = true, envMapIntensity = 0.8, cullOnly = false, collide = 0, field = false, impostor = false, tint = null } = {}) {
   if (!placements.length) return [];
   const gltf = await loadModel(name);
   prepareModel(gltf.scene, { foliage, envMapIntensity });
+  if (tint) gltf.scene.traverse((o) => { if (o.isMesh && tint[o.material.name]) { o.material = o.material.clone(); o.material.color.multiply(new THREE.Color(tint[o.material.name])); } });   // per material name, e.g. a green bush from a red-leaved one
   let lodParts = null;
   try { const lod = await loadGLTF(`models/${name}/${name}.lod.glb`); prepareModel(lod.scene, { foliage, envMapIntensity, alphaTest: 0.12 }); lodParts = bakedParts(lod); } catch (e) { /* no LOD variant */ }   // far cards stay solid instead of dissolving
   const parts = bakedParts(gltf);
-  return scatterParts(scene, parts, placements, { shadows, lodParts, cullOnly, collide, field: field ? fieldFor(name, parts) : null, name });
+  SCENE_FOG = scene.fog;
+  const imp = impostor && RENDERER ? bakeImpostor(RENDERER, lodParts || parts, SUN_DIR, { envIntensity: envMapIntensity }) : null; if (imp) IMPOSTORS[name] = imp;
+  return scatterParts(scene, parts, placements, { shadows, lodParts, cullOnly, collide, field: field ? fieldFor(name, parts) : null, name, impostor: imp });
 }
 /**
  * Card-based conifer: a tapered trunk with bark PBR plus tiers of textured twig cards. A few hundred triangles per tree,

@@ -9,3 +9,5 @@ public/assets/models/*/textures/
 public/assets/models/fir_tree_01/
 public/assets/models/pine_tree_01/
 public/assets/models/jacaranda_tree/
+# downloaded asset packs (Quaternius kit, Mixamo FBX); the converted .glb files are committed under public/assets
+sources/

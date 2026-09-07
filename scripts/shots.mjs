@@ -27,6 +27,11 @@ const VIEWS = {
   forge2: { setup: "__dbg.goto('bazaar', -2, 8); __dbg.game.unlock(['dfmp2','ccsd','dcsd']); __dbg.game.P.hotbar[2] = { spell: 'dcsd', opts: { extra: 'cc maxit=100 shiftp=0.5\\ndiis maxdiis=10', basis: 'vdz; O=avdz' } }; __dbg.game.showForge(); setTimeout(() => { const d = document.querySelector('.opthelp details'); if (d) d.open = true; }, 100)", wait: 1500, dom: true },
   bazaarbench: { setup: "__dbg.goto('bazaar', -2, 8); __dbg.cam(0, 0.3, 6)", wait: 3000 },
   vista:  { setup: "__dbg.goto('bazaar', 0, 2); __dbg.cam(3.14, 0.5, 12)", wait: 3500 },
+  panorama: { setup: "__dbg.goto('harbor', 0, 6); __dbg.freeCam(10, 30, 120, -10, 2, -30)", wait: 3500 },   // the whole island from the sea off the harbour: far trees are impostors
+  impostors: { setup: "__dbg.quality.lodNear = 3; __dbg.quality.lodFar = 4; __dbg.goto('forest', 2, 6); __dbg.freeCam(-36 + 14, 4, -30 + 22, -36, 5, -30)", wait: 2500 },   // every tree beyond 4 m is an impostor
+  impostors_mesh: { setup: "__dbg.quality.lodNear = 300; __dbg.quality.lodFar = 400; __dbg.goto('forest', 2, 6); __dbg.freeCam(-36 + 14, 4, -30 + 22, -36, 5, -30)", wait: 2500 },   // the same view with full meshes, for comparison
+  atlas: { setup: "__dbg.goto('tower', 0, 9); __dbg.freeCam(0, 40, -60, 0, 40, -120); window.__atlas = __dbg.showAtlas(process_env_ATLAS)".replace('process_env_ATLAS', JSON.stringify(process.env.ATLAS || 'fir_sapling_medium')), wait: 1500, probe: 'window.__atlas' },
+  treeline: { setup: "__dbg.goto('bazaar', 0, 2); __dbg.freeCam(2, 6, 30, -36, 6, -30)", wait: 3500 },   // the forest from the bazaar, 60-90 m away: LOD meshes and impostors side by side
 };
 const names = process.argv.slice(2).length ? process.argv.slice(2) : ['title', 'harbor'];
 mkdirSync('shots', { recursive: true });
@@ -51,7 +56,7 @@ for (const n of names) {
   if (v.dom || process.env.DOM) { try { await page.evaluate(() => window.__dbg.snapshot()); await page.screenshot({ path: `shots/${n}.png`, timeout: 240000 }); } catch (e) { console.log('dom screenshot failed, falling back:', e.message.split('\n')[0]); const dataUrl = await page.evaluate(() => window.__dbg.snapshot()); writeFileSync(`shots/${n}.png`, Buffer.from(dataUrl.split(',')[1], 'base64')); } }
   else { const dataUrl = await page.evaluate(() => window.__dbg.snapshot()); writeFileSync(`shots/${n}.png`, Buffer.from(dataUrl.split(',')[1], 'base64')); }
   console.log('saved shots/' + n + '.png', ((Date.now() - ts) / 1000).toFixed(1) + 's');
-  if (process.env.INFO) { try { console.log('info', n, ':', await page.evaluate(() => { const r = window.__dbg.renderer; window.__dbg.frameTime(); const i = r.info.render; return `calls ${i.calls} tris ${i.triangles} frame ${window.__dbg.frameTime().toFixed(1)} ms programs ${r.info.programs.length}`; })); } catch (e) { console.log('info failed', e.message); } }
+  if (process.env.INFO) { try { console.log('info', n, ':', await page.evaluate(() => { const r = window.__dbg.renderer; r.info.autoReset = false; window.__dbg.frameTime(); r.info.reset(); const ms = window.__dbg.frameTime(); const i = r.info.render; r.info.autoReset = true; return `calls ${i.calls} tris ${i.triangles} frame ${ms.toFixed(1)} ms programs ${r.info.programs.length}`; })); } catch (e) { console.log('info failed', e.message); } }
   if (v.probe) { try { console.log('probe', n, ':', await page.evaluate(v.probe)); } catch (e) { console.log('probe failed', e.message); } }
 }
 const info = await page.evaluate(() => (window.__dbg && window.__dbg.renderer) ? JSON.stringify(window.__dbg.renderer.info.render) + ' ' + JSON.stringify({ geometries: window.__dbg.renderer.info.memory.geometries, textures: window.__dbg.renderer.info.memory.textures }) : 'no dbg').catch(() => '');

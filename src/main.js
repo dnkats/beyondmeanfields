@@ -1,7 +1,7 @@
 // Bootstrap: renderer, sky, terrain, water, vegetation, buildings, props, characters, post-processing, then the game.
 import * as THREE from 'three';
 import { manager, loadClipLibrary } from './assets.js';
-import { ZONES, zoneById, terrainH, walkable, WATER_Y, createRenderer, createLights, setupSky, buildTerrain, buildWater, scatterModel, scatterParts, conifierParts, placements, windSway, placeModel, modelSize, cottage, tower, createPost, srand, SUN_DIR, updateLOD, addCircle, resolveCollisions, createLightPool, surfaceH, rockH, COLLIDERS, addModelField } from './world.js';
+import { ZONES, zoneById, terrainH, walkable, WATER_Y, createRenderer, createLights, setupSky, buildTerrain, buildWater, scatterModel, scatterParts, conifierParts, placements, windSway, placeModel, modelSize, cottage, tower, createPost, srand, SUN_DIR, updateLOD, addCircle, resolveCollisions, createLightPool, surfaceH, rockH, COLLIDERS, addModelField, setRenderer, IMPOSTORS } from './world.js';
 import { createCharacter } from './characters.js';
 import { createGame } from './game.js';
 import { SPELLS } from './spells.js';
@@ -13,9 +13,10 @@ const $ = (id) => document.getElementById(id);
 const coarse = window.matchMedia && window.matchMedia('(pointer: coarse)').matches;
 const PRESETS = {
   // ao renders the scene a second time for normals, so it is only worth it once the geometry is cheap; shadows use a 40 m box around the player
-  high:   { high: true,  post: true,  ao: true,  bloom: true,  shadow: 2048, pr: 1.25, grass: 2000, trees: 1.0, lodNear: 44, lodFar: 130, terrainN: 220 },
-  medium: { high: false, post: true,  ao: false, bloom: true,  shadow: 2048, pr: 1.0,  grass: 1200, trees: 0.7, lodNear: 34, lodFar: 100, terrainN: 160 },
-  low:    { high: false, post: false, ao: false, bloom: false, shadow: 1024, pr: 1.0,  grass: 600,  trees: 0.5, lodNear: 26, lodFar: 75,  terrainN: 120 },
+  // lodNear / lodFar / impFar: full mesh, decimated mesh, billboard impostor (distance to the nearest tree of a cell)
+  high:   { high: true,  post: true,  ao: true,  bloom: true,  shadow: 2048, pr: 1.25, grass: 2000, trees: 1.0, lodNear: 40, lodFar: 110, impFar: 320, terrainN: 220 },
+  medium: { high: false, post: true,  ao: false, bloom: true,  shadow: 2048, pr: 1.0,  grass: 1200, trees: 0.7, lodNear: 28, lodFar: 80,  impFar: 320, terrainN: 160 },
+  low:    { high: false, post: false, ao: false, bloom: false, shadow: 1024, pr: 1.0,  grass: 600,  trees: 0.5, lodNear: 20, lodFar: 60,  impFar: 300, terrainN: 120 },
 };
 function detectPreset() {
   const forced = new URLSearchParams(location.search).get('q') || localStorage.getItem('ci.quality'); if (forced && PRESETS[forced]) return forced;
@@ -37,7 +38,7 @@ const SKY_ROT = HDRI_AZ - PHI;
 SUN_DIR.set(Math.cos(HDRI_EL) * Math.cos(PHI), Math.sin(HDRI_EL), Math.cos(HDRI_EL) * Math.sin(PHI)).normalize();
 
 const canvas = $('c');
-const renderer = createRenderer(canvas, quality);
+const renderer = createRenderer(canvas, quality); setRenderer(renderer);
 const scene = new THREE.Scene();
 const camera = new THREE.PerspectiveCamera(52, 1, 0.1, 600);
 const { sun } = createLights(scene, quality);
@@ -54,27 +55,29 @@ async function build() {
   const T = quality.trees;
   // vegetation
   const jobs = [];
-  jobs.push(scatterModel(scene, 'fir_sapling_medium', placements(Math.round(50 * T), { near: { x: forest.x, z: forest.z, r0: 5, r1: 17 }, avoidZones: false, minDist: 3.2, scale: [1.1, 1.7], exclude: [{ x: forest.x - 1, z: forest.z, r: 4 }] }), { foliage: true, collide: 0.3 }));
-  jobs.push(scatterModel(scene, 'fir_sapling_medium', placements(Math.round(45 * T), { minDist: 4.5, scale: [1.0, 1.8], maxH: 8.5 }), { foliage: true, collide: 0.3 }));
-  jobs.push(scatterModel(scene, 'pine_sapling_small', placements(Math.round(70 * T), { minDist: 3, scale: [1.2, 2.2], maxH: 9, zoneMargin: 0.7 }), { foliage: true, collide: 0.28 }));
-  jobs.push(scatterModel(scene, 'island_tree_01', placements(Math.round(22 * T), { minDist: 6, scale: [1.0, 1.4], maxH: 7 }), { foliage: true, collide: 0.4 }));
-  jobs.push(scatterModel(scene, 'island_tree_02', placements(Math.round(18 * T), { minDist: 6, scale: [1.0, 1.4], maxH: 7 }), { foliage: true, collide: 0.4 }));
-  jobs.push(scatterModel(scene, 'tree_small_02', placements(Math.round(30 * T), { minDist: 4, scale: [1.0, 1.5], maxH: 8 }), { foliage: true, collide: 0.35 }));
+  // trees: Quaternius Stylized Nature MegaKit (CC0), 1.6-10k triangles each with solid leaf geometry; every type gets a billboard impostor for the distance
+  const tree = (name, n, opts, collide = 0.3) => jobs.push(scatterModel(scene, name, placements(Math.round(n * T), opts), { foliage: true, impostor: true, collide }));
+  const ring = { near: { x: forest.x, z: forest.z, r0: 5, r1: 17 }, avoidZones: false, minDist: 3.6, exclude: [{ x: forest.x - 1, z: forest.z, r: 4 }] };
+  tree('q_pine_1', 18, { ...ring, scale: [0.9, 1.4] }); tree('q_pine_3', 16, { ...ring, scale: [0.9, 1.3], seedOffset: 1 }); tree('q_tree_3', 12, { ...ring, scale: [0.9, 1.2], seedOffset: 2 });
+  tree('q_pine_2', 24, { minDist: 4.5, scale: [0.9, 1.4], maxH: 8.5 }); tree('q_pine_4', 20, { minDist: 4.5, scale: [0.9, 1.3], maxH: 8.5, seedOffset: 3 }); tree('q_pine_5', 16, { minDist: 4.5, scale: [0.9, 1.3], maxH: 8.5, seedOffset: 4 });
+  tree('q_tree_1', 20, { minDist: 5.5, scale: [0.9, 1.3], maxH: 7 }); tree('q_tree_2', 18, { minDist: 5.5, scale: [0.9, 1.3], maxH: 7, seedOffset: 5 });
+  tree('q_tree_4', 16, { minDist: 5.5, scale: [0.9, 1.3], maxH: 7, seedOffset: 6 }); tree('q_tree_5', 16, { minDist: 5.5, scale: [0.9, 1.3], maxH: 7, seedOffset: 7 });
+  tree('q_twisted_1', 5, { minDist: 12, scale: [0.6, 0.8], maxH: 7, zoneMargin: 1.2 }, 0.6); tree('q_twisted_2', 4, { minDist: 12, scale: [0.6, 0.8], maxH: 7, zoneMargin: 1.2, seedOffset: 8 }, 0.6); tree('q_twisted_3', 4, { minDist: 12, scale: [0.6, 0.8], maxH: 7, zoneMargin: 1.2, seedOffset: 9 }, 0.6);
+  tree('q_dead_1', 4, { near: { x: forest.x, z: forest.z, r0: 3, r1: 14 }, avoidZones: false, scale: [0.55, 0.75] }, 0.4); tree('q_dead_2', 4, { near: { x: forest.x, z: forest.z, r0: 3, r1: 14 }, avoidZones: false, scale: [0.55, 0.75], seedOffset: 10 }, 0.4);
   // undergrowth casts no shadows: it is small, plentiful, and the shadow pass was doubling the frame
-  jobs.push(scatterModel(scene, 'shrub_01', placements(Math.round(120 * T), { scale: [0.8, 1.4], zoneMargin: 0.6 }), { foliage: true, shadows: false }));
-  jobs.push(scatterModel(scene, 'shrub_03', placements(Math.round(90 * T), { scale: [0.8, 1.4], zoneMargin: 0.6 }), { foliage: true, shadows: false }));
-  jobs.push(scatterModel(scene, 'fern_02', placements(Math.round(110 * T), { near: { x: forest.x, z: forest.z, r0: 2, r1: 20 }, avoidZones: false, scale: [0.9, 1.5] }), { foliage: true, shadows: false }));
-  jobs.push(scatterModel(scene, 'flower_gazania', placements(Math.round(70 * T), { near: { x: -20, z: 20, r0: 0, r1: 45 }, avoidZones: false, scale: [0.9, 1.4] }), { foliage: true, shadows: false }));
+  jobs.push(scatterModel(scene, 'q_bush_flowers', placements(Math.round(150 * T), { scale: [0.6, 1.1], zoneMargin: 0.6, seedOffset: 11 }), { foliage: true, shadows: false }));   // the kit's plain bush is red-leaved; the flowering one is green
+  jobs.push(scatterModel(scene, 'q_fern', placements(Math.round(110 * T), { near: { x: forest.x, z: forest.z, r0: 2, r1: 20 }, avoidZones: false, scale: [0.6, 1.0] }), { foliage: true, shadows: false }));
+  jobs.push(scatterModel(scene, 'q_flowers_3', placements(Math.round(40 * T), { near: { x: -20, z: 20, r0: 0, r1: 45 }, avoidZones: false, scale: [0.3, 0.5] }), { foliage: true, shadows: false }));
+  jobs.push(scatterModel(scene, 'q_flowers_4', placements(Math.round(30 * T), { near: { x: -20, z: 20, r0: 0, r1: 45 }, avoidZones: false, scale: [0.3, 0.5], seedOffset: 12 }), { foliage: true, shadows: false }));
   jobs.push(scatterModel(scene, 'namaqualand_boulder_02', placements(30, { scale: [0.7, 1.5], maxSlope: 1.2, minH: 0.8, zoneMargin: 1.1, seedOffset: 7, sink: 0.5 }), { shadows: true, field: true }));   // boulder_01's scan cannot be simplified below 54k (seams), this one is 3.5k
   jobs.push(scatterModel(scene, 'rock_moss_set_01', placements(30, { scale: [0.8, 1.6], maxSlope: 1.2, sink: 0.5 }), { shadows: true, field: true }));
   jobs.push(scatterModel(scene, 'stone_01', placements(70, { scale: [0.6, 1.8], maxSlope: 1.5, minH: 0.6 }), { shadows: true }));
   jobs.push(scatterModel(scene, 'coast_rocks_02', placements(22, { minH: 0.2, maxH: 1.2, maxSlope: 2, scale: [0.5, 1.0], zoneMargin: 1.4 }), { shadows: true, field: true }));
   jobs.push(scatterModel(scene, 'namaqualand_boulder_02', placements(18, { near: { x: 36, z: -36, r0: 4, r1: 22 }, avoidZones: false, maxSlope: 1.5, scale: [0.6, 1.3], sink: 0.5 }), { shadows: true, field: true }));
   jobs.push(scatterModel(scene, 'rock_face_01', placements(10, { near: { x: 0, z: -60, r0: 12, r1: 24 }, avoidZones: false, maxSlope: 3, minH: 3, scale: [0.6, 1.2], sink: 0.6 }), { shadows: true, field: true }));
-  jobs.push(scatterModel(scene, 'dead_tree_trunk', placements(8, { near: { x: forest.x, z: forest.z, r0: 3, r1: 14 }, avoidZones: false, scale: [0.8, 1.2] })));
   jobs.push(scatterModel(scene, 'tree_stump_01', placements(14, { near: { x: forest.x, z: forest.z, r0: 3, r1: 16 }, avoidZones: false, scale: [0.8, 1.3] })));
-  const grassPl = placements(quality.grass, { scale: [1.3, 2.1], zoneMargin: 0.35, maxSlope: 0.7, minH: 1.0 });   // knee-high tufts, not reeds
-  jobs.push(scatterModel(scene, 'grass_medium_02', grassPl, { foliage: true, shadows: false, cullOnly: true }).then((ms) => ms.forEach((m) => windSway(m.material, 0.1))));
+  const grassPl = placements(quality.grass, { scale: [0.28, 0.5], zoneMargin: 0.35, maxSlope: 0.7, minH: 1.0 });   // the kit's blades are 1.3 m at scale 1: knee-high tufts, not reeds
+  jobs.push(scatterModel(scene, 'q_grass_short', grassPl, { foliage: true, shadows: false, cullOnly: true }).then((ms) => ms.forEach((m) => windSway(m.material, 0.1))));
   (await Promise.allSettled(jobs)).forEach((r) => { if (r.status === 'rejected') console.warn('vegetation failed', r.reason && r.reason.message); });
 
   // zones: buildings & props
@@ -149,7 +152,7 @@ async function build() {
   // locked for a minute instead of oscillating between the two.
   const fpsState = { acc: 0, n: 0, t: 0, pr: quality.pr, good: 0, lastUp: -1e9, lockUntil: 0, now: 0 };
   const renderFrame = (dt = 0) => {
-    updateLOD(camera.position, quality.lodNear, quality.lodFar);
+    updateLOD(camera.position, quality.lodNear, quality.lodFar, quality.impFar);
     if (post) post.composer.render(); else renderer.render(scene, camera);
     if (dt > 0 && !navigator.webdriver) { fpsState.acc += dt; fpsState.n++; fpsState.t += dt; fpsState.now += dt;
       if (fpsState.t > 2) { const fps = fpsState.n / fpsState.acc, now = fpsState.now; let pr = fpsState.pr; fpsState.good = fps > 55 ? fpsState.good + fpsState.t : 0;
@@ -181,8 +184,12 @@ async function build() {
   const tc = performance.now(); try { await renderer.compileAsync(scene, camera); } catch (e) { console.warn('compile', e); } console.log('shaders compiled in', ((performance.now() - tc) / 1000).toFixed(1), 's');
   $('loading').hidden = true;
   game.start();
-  window.__dbg = { game, scene, camera, renderer, npcs, playerChar, THREE, SUN_DIR, resolveCollisions, walkable, terrainH, surfaceH, rockH, COLLIDERS,
-    goto(zone, dx, dz) { game.startGame(false); game.goto(zone, dx, dz); }, cam(yaw, pitch, dist) { game.cam.yaw = yaw; game.cam.pitch = pitch; game.cam.dist = dist; game.cam.dragT = 99; game.settle(); },
+  window.__dbg = { game, scene, camera, renderer, npcs, playerChar, THREE, SUN_DIR, quality, IMPOSTORS,
+    /** development: hang an impostor atlas in front of the camera */
+    showAtlas(name) { const imp = IMPOSTORS[name]; if (!imp) return 'no atlas ' + name; const q = new THREE.Mesh(new THREE.PlaneGeometry(imp.views * 4, 4), new THREE.MeshBasicMaterial({ map: imp.tex, transparent: true, side: THREE.DoubleSide })); camera.getWorldDirection(q.position); q.position.multiplyScalar(12).add(camera.position); q.lookAt(camera.position); scene.add(q); return `${imp.views} views, ${imp.w.toFixed(1)} x ${imp.h.toFixed(1)} m`; }, resolveCollisions, walkable, terrainH, surfaceH, rockH, COLLIDERS,
+    goto(zone, dx, dz) { game.startGame(false); game.goto(zone, dx, dz); },
+    freeCam(px, py, pz, tx, ty, tz) { game.cam.free = px === null ? null : { pos: new THREE.Vector3(px, py, pz), target: new THREE.Vector3(tx, ty, tz) }; game.cam.update(0.05, game.P); },
+    cam(yaw, pitch, dist) { game.cam.yaw = yaw; game.cam.pitch = pitch; game.cam.dist = dist; game.cam.dragT = 99; game.settle(); },
     frameTime() { const t = performance.now(); renderFrame(0); return performance.now() - t; },
     snapshot() { const t0 = performance.now(); renderFrame(0); const t1 = performance.now(); renderFrame(0); const t2 = performance.now(); const d = canvas.toDataURL('image/png'); console.warn(`snapshot: first render ${(t1 - t0).toFixed(0)} ms, second ${(t2 - t1).toFixed(0)} ms, encode ${(performance.now() - t2).toFixed(0)} ms, programs ${renderer.info.programs.length}`); return d; },
     sunMarker() { const m = new THREE.Mesh(new THREE.SphereGeometry(6, 16, 12), new THREE.MeshBasicMaterial({ color: 0xff00ff })); m.position.copy(SUN_DIR).multiplyScalar(300).add(camera.position); scene.add(m); } };

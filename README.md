@@ -36,9 +36,10 @@ npm install
 npm run dev        # http://localhost:5173
 ```
 
-The decimated models, textures, HDRI and characters (about 190 MB) are committed under `public/assets`, so a clone runs as is.
-To regenerate them from the original scans: `npm run fetch` (about 700 MB of CC0 / freely licensed sources) and `npm run optimize`
-(decimation to game budgets plus LOD variants); the raw sources are git-ignored. `npm run build` produces a static site in
+The decimated models, textures, HDRI and characters (about 170 MB) are committed under `public/assets`, so a clone runs as is.
+To regenerate them from the original sources: `npm run fetch` (Poly Haven scans and the Quaternius nature kit, about 800 MB, CC0 / freely
+licensed), `npm run optimize` (decimation of the scans to game budgets plus LOD variants) and `node scripts/convert-kit.mjs` (the kit's
+trees, bushes and rocks to `q_*.glb`); the raw sources are git-ignored. `npm run build` produces a static site in
 `dist/`; the workflow in `.github/workflows/pages.yml` does that with `BASE_PATH=/beyondmeanfields/` on every push to `main`
 and publishes it to GitHub Pages. `npm run shots harbor forest` renders development screenshots.
 
@@ -63,7 +64,7 @@ and publishes it to GitHub Pages. `npm run shots harbor forest` renders developm
 
 Progress is saved in the browser. The graphics preset is auto-detected (integrated GPUs get `medium`); append `?q=low`, `?q=medium` or `?q=high` to force one. Vegetation is chunked with frustum culling and distance LOD, and the render resolution adapts to hold the frame rate, so integrated laptop GPUs are the target for `medium`.
 
-Per frame the presets draw roughly: `high` 4–9 M triangles and 500–1300 draw calls (main pass, a 40 m shadow box, half-resolution ambient occlusion, bloom, a colour grade, SMAA), `medium` 1–3 M and 300–600 (no ambient occlusion), `low` less still and no post-processing. Trees carry two levels of detail (full scans of about 20–47 k triangles near, 3–7 k beyond `lodNear`), undergrowth never casts shadows, and mentors beyond 90 m are not drawn. Foliage textures have their leaf colour bled into transparent texels and use low alpha cutoffs so distant cards do not dissolve into speckles.
+Per frame the `medium` preset draws roughly 0.8–2 M triangles and 300–700 draw calls (main pass, a 40 m shadow box, bloom, a colour grade, SMAA); `high` adds half-resolution ambient occlusion and a higher render resolution, `low` drops post-processing. Vegetation comes from the Quaternius Stylized Nature MegaKit (CC0): trees of 1.6–10 k triangles with solid leaf geometry, drawn as meshes up to `lodFar` and as billboard impostors beyond it. The impostors are baked at load time (`src/impostor.js`): every tree type is rendered from eight azimuths into an atlas, and far cells draw one instanced quad per tree that picks the view facing the camera. Undergrowth never casts shadows, and mentors beyond 90 m are not drawn.
 
 ## Screenshots for development
 
