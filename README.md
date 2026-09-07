@@ -63,6 +63,8 @@ and publishes it to GitHub Pages. `npm run shots harbor forest` renders developm
 
 Progress is saved in the browser. The graphics preset is auto-detected (integrated GPUs get `medium`); append `?q=low`, `?q=medium` or `?q=high` to force one. Vegetation is chunked with frustum culling and distance LOD, and the render resolution adapts to hold the frame rate, so integrated laptop GPUs are the target for `medium`.
 
+Per frame the presets draw roughly: `high` 4–9 M triangles and 500–1300 draw calls (main pass, a 40 m shadow box, half-resolution ambient occlusion, bloom, a colour grade, SMAA), `medium` 1–3 M and 300–600 (no ambient occlusion), `low` less still and no post-processing. Trees carry two levels of detail (full scans of about 20–47 k triangles near, 3–7 k beyond `lodNear`), undergrowth never casts shadows, and mentors beyond 90 m are not drawn. Foliage textures have their leaf colour bled into transparent texels and use low alpha cutoffs so distant cards do not dissolve into speckles.
+
 ## Screenshots for development
 
 `node scripts/shots.mjs harbor bazaar forest` starts Vite, opens headless Chromium (SwiftShader) and captures the listed views

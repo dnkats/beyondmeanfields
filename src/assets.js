@@ -48,7 +48,7 @@ export async function pbrMaterial(name, { repeat = 1, roughness = 1, metalness =
 }
 
 /** Shadow flags + foliage alpha handling for a loaded model. */
-export function prepareModel(root, { shadows = true, foliage = false, envMapIntensity = 1 } = {}) {
+export function prepareModel(root, { shadows = true, foliage = false, envMapIntensity = 1, alphaTest = 0.35 } = {}) {
   root.traverse((o) => {
     if (!o.isMesh) return;
     o.castShadow = shadows; o.receiveShadow = shadows;
@@ -58,7 +58,7 @@ export function prepareModel(root, { shadows = true, foliage = false, envMapInte
       if (!m) continue;
       m.envMapIntensity = envMapIntensity;
       const leafy = foliage || m.transparent || /twig|leaf|leaves|foliage|grass|fern|flower|needle/i.test(m.name + o.name);
-      if (leafy && m.map) { m.transparent = false; m.alphaTest = 0.45; m.side = THREE.DoubleSide; m.depthWrite = true; }
+      if (leafy && m.map) { m.transparent = false; m.alphaTest = alphaTest; m.side = THREE.DoubleSide; m.depthWrite = true; }   // a low cutoff keeps mip-averaged cards from starving into speckles at distance
       if (m.map) m.map.anisotropy = 8;
     }
   });

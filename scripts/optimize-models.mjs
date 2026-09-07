@@ -12,14 +12,33 @@ const ROOT = new URL('../public/assets/models/', import.meta.url).pathname;
 // target triangle counts (approximate) and texture size
 export const BUDGET = {
   pine_tree_01: [45000, 1024], fir_tree_01: [45000, 1024], jacaranda_tree: [45000, 1024], tree_small_02: [40000, 1024], island_tree_01: [40000, 1024], island_tree_02: [36000, 1024],
-  fir_sapling_medium: [50000, 1024], pine_sapling_small: [22000, 1024], shrub_01: [3500, 512], shrub_03: [3000, 512], fern_02: [3000, 512], grass_medium_01: [700, 512], grass_medium_02: [500, 512], flower_gazania: [2500, 512],
-  dead_tree_trunk: [5000, 512], tree_stump_01: [4000, 512], boulder_01: [9000, 1024], rock_moss_set_01: [12000, 1024], namaqualand_boulder_02: [8000, 1024], coast_rocks_02: [16000, 1024], stone_01: [1500, 512],
-  rock_face_01: [12000, 1024], coastal_cliff_02: [60000, 1024], modular_wooden_pier: [10000, 1024], ship_pinnace: [40000, 1024], wooden_barrels_01: [4000, 512], wine_barrel_01: [3000, 512],
+  fir_sapling_medium: [50000, 1024], pine_sapling_small: [22000, 1024], shrub_01: [2000, 512], shrub_03: [1800, 512], fern_02: [1800, 512], grass_medium_01: [700, 512], grass_medium_02: [350, 512], flower_gazania: [1500, 512],
+  dead_tree_trunk: [5000, 512], tree_stump_01: [4000, 512], boulder_01: [3000, 1024], rock_moss_set_01: [6000, 1024], namaqualand_boulder_02: [3500, 1024], coast_rocks_02: [10000, 1024], stone_01: [1500, 512],
+  rock_face_01: [8000, 1024], coastal_cliff_02: [30000, 1024], modular_wooden_pier: [10000, 1024], ship_pinnace: [25000, 1024], wooden_barrels_01: [4000, 512], wine_barrel_01: [3000, 512],
   wooden_crate_01: [1500, 512], wooden_bucket_01: [1200, 512], wooden_lantern_01: [2500, 512], Lantern_01: [3000, 512], street_lamp_01: [4000, 512], treasure_chest: [4000, 512], stone_fire_pit: [2500, 512],
-  modular_fort_01: [20000, 1024], large_castle_door: [4000, 1024], WoodenTable_01: [1000, 512], wooden_stool_01: [1200, 512], painted_wooden_bench: [800, 512], planter_box_01: [1500, 512], wooden_ladder: [2000, 512],
-  chemistry_set: [6000, 512], bunsen_burner: [2000, 512], vintage_microscope: [4000, 512], book_encyclopedia_set_01: [2500, 512], cannon_01: [5000, 512], garden_gnome: [3000, 512],
+  modular_fort_01: [15000, 1024], large_castle_door: [4000, 1024], WoodenTable_01: [1000, 512], wooden_stool_01: [1200, 512], painted_wooden_bench: [800, 512], planter_box_01: [1500, 512], wooden_ladder: [2000, 512],
+  chemistry_set: [6000, 512], bunsen_burner: [2000, 512], vintage_microscope: [4000, 512], book_encyclopedia_set_01: [6000, 512], cannon_01: [5000, 512], garden_gnome: [3000, 512],
 };
-const LOD = new Set(['tree_small_02', 'island_tree_01', 'island_tree_02', 'fir_sapling_medium', 'pine_sapling_small', 'shrub_01', 'shrub_03', 'fern_02', 'boulder_01', 'rock_moss_set_01', 'coast_rocks_02', 'namaqualand_boulder_02', 'rock_face_01']);
+const LOD = new Set(['tree_small_02', 'island_tree_01', 'island_tree_02', 'fir_sapling_medium', 'pine_sapling_small', 'shrub_01', 'shrub_03', 'fern_02', 'boulder_01', 'rock_moss_set_01', 'coast_rocks_02', 'namaqualand_boulder_02', 'rock_face_01', 'flower_gazania']);
+// far-LOD triangle budgets (instances beyond lodNear use these; they never cast shadows)
+const LOD_TRIS = { fir_sapling_medium: 7000, pine_sapling_small: 3000, island_tree_01: 6000, island_tree_02: 6000, tree_small_02: 6000, shrub_01: 450, shrub_03: 450, fern_02: 450,
+  boulder_01: 700, rock_moss_set_01: 1200, coast_rocks_02: 2000, namaqualand_boulder_02: 700, rock_face_01: 1600, flower_gazania: 450 };
+/**
+ * Alpha-cut foliage textures carry black (or garbage) colour under their transparent texels; mip filtering blends it into the
+ * leaf edges as a dark halo and far trees turn into speckled sticks. Bleeding the mean leaf colour into those texels removes it.
+ */
+async function bleedAlpha(doc) {
+  for (const tex of doc.getRoot().listTextures()) {
+    if (!/png|webp/.test(tex.getMimeType() || '')) continue;
+    const img = sharp(Buffer.from(tex.getImage())); const meta = await img.metadata(); if (!meta.hasAlpha) continue;
+    const { data, info } = await img.raw().toBuffer({ resolveWithObject: true }); const ch = info.channels; if (ch < 4) continue;
+    let r = 0, g = 0, b = 0, n = 0; for (let i = 0; i < data.length; i += ch) if (data[i + 3] > 200) { r += data[i]; g += data[i + 1]; b += data[i + 2]; n++; }
+    if (!n) continue; r /= n; g /= n; b /= n;
+    for (let i = 0; i < data.length; i += ch) if (data[i + 3] < 160) { const a = data[i + 3] / 160; data[i] = data[i] * a + r * (1 - a); data[i + 1] = data[i + 1] * a + g * (1 - a); data[i + 2] = data[i + 2] * a + b * (1 - a); }
+    const out = await sharp(data, { raw: { width: info.width, height: info.height, channels: ch } }).png().toBuffer();
+    tex.setImage(new Uint8Array(out)).setMimeType('image/png');
+  }
+}
 const names = process.argv.slice(2).length ? process.argv.slice(2) : Object.keys(BUDGET);
 const io = new NodeIO().registerExtensions(ALL_EXTENSIONS);
 await MeshoptSimplifier.ready;
@@ -38,14 +57,16 @@ for (const name of names) {
     const before = triCount(doc);
     const ratio = Math.min(1, target / Math.max(before, 1));
     await doc.transform(dedup(), flatten(), join({ keepNamed: false }), weld({ tolerance: 0.0001 }));
-    if (ratio < 0.95) await doc.transform(simplify({ simplifier: MeshoptSimplifier, ratio, error: 0.5, lockBorder: false }));
-    await doc.transform(textureCompress({ encoder: sharp, targetFormat: 'jpeg', quality: 82, resize: [texSize, texSize] }), prune());
+    if (ratio < 0.95) await doc.transform(simplify({ simplifier: MeshoptSimplifier, ratio, error: 1, lockBorder: false }));   // error 1: always reach the budget (0.5 left the boulder at 54k)
+    await bleedAlpha(doc);
+    await doc.transform(textureCompress({ encoder: sharp, targetFormat: 'webp', quality: 82, resize: [texSize, texSize] }), prune());   // webp keeps alpha and is far smaller than png
     // alpha-cutout materials: force alphaMode MASK so the runtime uses alphaTest, and mark double sided
     for (const m of doc.getRoot().listMaterials()) { if (m.getAlphaMode() === 'BLEND') { m.setAlphaMode('MASK'); m.setAlphaCutoff(0.45); m.setDoubleSided(true); } }
     await io.write(out, doc);
     console.log(`${name}: ${before.toLocaleString()} -> ${Math.round(triCount(doc)).toLocaleString()} tris, ${(statSync(out).size / 1e6).toFixed(1)} MB, ${((Date.now() - t0) / 1000).toFixed(0)} s`);
     if (LOD.has(name)) {   // far-distance variant: a fifth of the triangles, quarter-size textures
-      await doc.transform(simplify({ simplifier: MeshoptSimplifier, ratio: 0.2, error: 0.8, lockBorder: false }), textureCompress({ encoder: sharp, targetFormat: 'jpeg', quality: 75, resize: [256, 256] }), prune());
+      const lodTarget = LOD_TRIS[name] || Math.round(target / 5), lodRatio = Math.min(1, lodTarget / Math.max(1, triCount(doc)));
+      await doc.transform(simplify({ simplifier: MeshoptSimplifier, ratio: lodRatio, error: 1, lockBorder: false }), textureCompress({ encoder: sharp, targetFormat: 'webp', quality: 75, resize: [256, 256] }), prune());
       const lod = `${ROOT}${name}/${name}.lod.glb`; await io.write(lod, doc);
       console.log(`  lod: ${Math.round(triCount(doc)).toLocaleString()} tris, ${(statSync(lod).size / 1e6).toFixed(1)} MB`);
     }

@@ -12,9 +12,10 @@ import { ENCOUNTERS } from './spells.js';
 const $ = (id) => document.getElementById(id);
 const coarse = window.matchMedia && window.matchMedia('(pointer: coarse)').matches;
 const PRESETS = {
-  high:   { high: true,  post: true,  ao: true,  bloom: true,  shadow: 4096, pr: 1.5, grass: 2400, trees: 1.0, lodNear: 60, lodFar: 150, terrainN: 220 },
-  medium: { high: false, post: true,  ao: false, bloom: true,  shadow: 2048, pr: 1.0, grass: 1300, trees: 0.7, lodNear: 42, lodFar: 115, terrainN: 160 },
-  low:    { high: false, post: false, ao: false, bloom: false, shadow: 1024, pr: 1.0, grass: 700,  trees: 0.5, lodNear: 32, lodFar: 90,  terrainN: 120 },
+  // ao renders the scene a second time for normals, so it is only worth it once the geometry is cheap; shadows use a 40 m box around the player
+  high:   { high: true,  post: true,  ao: true,  bloom: true,  shadow: 2048, pr: 1.25, grass: 2000, trees: 1.0, lodNear: 44, lodFar: 130, terrainN: 220 },
+  medium: { high: false, post: true,  ao: false, bloom: true,  shadow: 2048, pr: 1.0,  grass: 1200, trees: 0.7, lodNear: 34, lodFar: 100, terrainN: 160 },
+  low:    { high: false, post: false, ao: false, bloom: false, shadow: 1024, pr: 1.0,  grass: 600,  trees: 0.5, lodNear: 26, lodFar: 75,  terrainN: 120 },
 };
 function detectPreset() {
   const forced = new URLSearchParams(location.search).get('q') || localStorage.getItem('ci.quality'); if (forced && PRESETS[forced]) return forced;
@@ -59,11 +60,12 @@ async function build() {
   jobs.push(scatterModel(scene, 'island_tree_01', placements(Math.round(22 * T), { minDist: 6, scale: [1.0, 1.4], maxH: 7 }), { foliage: true, collide: 0.4 }));
   jobs.push(scatterModel(scene, 'island_tree_02', placements(Math.round(18 * T), { minDist: 6, scale: [1.0, 1.4], maxH: 7 }), { foliage: true, collide: 0.4 }));
   jobs.push(scatterModel(scene, 'tree_small_02', placements(Math.round(30 * T), { minDist: 4, scale: [1.0, 1.5], maxH: 8 }), { foliage: true, collide: 0.35 }));
-  jobs.push(scatterModel(scene, 'shrub_01', placements(Math.round(120 * T), { scale: [0.8, 1.4], zoneMargin: 0.6 }), { foliage: true }));
-  jobs.push(scatterModel(scene, 'shrub_03', placements(Math.round(90 * T), { scale: [0.8, 1.4], zoneMargin: 0.6 }), { foliage: true }));
-  jobs.push(scatterModel(scene, 'fern_02', placements(Math.round(110 * T), { near: { x: forest.x, z: forest.z, r0: 2, r1: 20 }, avoidZones: false, scale: [0.9, 1.5] }), { foliage: true }));
-  jobs.push(scatterModel(scene, 'flower_gazania', placements(Math.round(90 * T), { near: { x: -20, z: 20, r0: 0, r1: 45 }, avoidZones: false, scale: [0.9, 1.4] }), { foliage: true }));
-  jobs.push(scatterModel(scene, 'boulder_01', placements(30, { scale: [0.5, 1.2], maxSlope: 1.2, minH: 0.8, zoneMargin: 1.1 }), { shadows: true, field: true }));
+  // undergrowth casts no shadows: it is small, plentiful, and the shadow pass was doubling the frame
+  jobs.push(scatterModel(scene, 'shrub_01', placements(Math.round(120 * T), { scale: [0.8, 1.4], zoneMargin: 0.6 }), { foliage: true, shadows: false }));
+  jobs.push(scatterModel(scene, 'shrub_03', placements(Math.round(90 * T), { scale: [0.8, 1.4], zoneMargin: 0.6 }), { foliage: true, shadows: false }));
+  jobs.push(scatterModel(scene, 'fern_02', placements(Math.round(110 * T), { near: { x: forest.x, z: forest.z, r0: 2, r1: 20 }, avoidZones: false, scale: [0.9, 1.5] }), { foliage: true, shadows: false }));
+  jobs.push(scatterModel(scene, 'flower_gazania', placements(Math.round(70 * T), { near: { x: -20, z: 20, r0: 0, r1: 45 }, avoidZones: false, scale: [0.9, 1.4] }), { foliage: true, shadows: false }));
+  jobs.push(scatterModel(scene, 'namaqualand_boulder_02', placements(30, { scale: [0.7, 1.5], maxSlope: 1.2, minH: 0.8, zoneMargin: 1.1, seedOffset: 7 }), { shadows: true, field: true }));   // boulder_01's scan cannot be simplified below 54k (seams), this one is 3.5k
   jobs.push(scatterModel(scene, 'rock_moss_set_01', placements(30, { scale: [0.8, 1.6], maxSlope: 1.2 }), { shadows: true, field: true }));
   jobs.push(scatterModel(scene, 'stone_01', placements(70, { scale: [0.6, 1.8], maxSlope: 1.5, minH: 0.6 }), { shadows: true }));
   jobs.push(scatterModel(scene, 'coast_rocks_02', placements(22, { minH: 0.2, maxH: 1.2, maxSlope: 2, scale: [0.5, 1.0], zoneMargin: 1.4 }), { shadows: true, field: true }));
@@ -71,7 +73,7 @@ async function build() {
   jobs.push(scatterModel(scene, 'rock_face_01', placements(10, { near: { x: 0, z: -60, r0: 12, r1: 24 }, avoidZones: false, maxSlope: 3, minH: 3, scale: [0.6, 1.2] }), { shadows: true, field: true }));
   jobs.push(scatterModel(scene, 'dead_tree_trunk', placements(8, { near: { x: forest.x, z: forest.z, r0: 3, r1: 14 }, avoidZones: false, scale: [0.8, 1.2] })));
   jobs.push(scatterModel(scene, 'tree_stump_01', placements(14, { near: { x: forest.x, z: forest.z, r0: 3, r1: 16 }, avoidZones: false, scale: [0.8, 1.3] })));
-  const grassPl = placements(quality.grass, { scale: [2.6, 4.2], zoneMargin: 0.35, maxSlope: 0.7, minH: 1.0 });
+  const grassPl = placements(quality.grass, { scale: [1.3, 2.1], zoneMargin: 0.35, maxSlope: 0.7, minH: 1.0 });   // knee-high tufts, not reeds
   jobs.push(scatterModel(scene, 'grass_medium_02', grassPl, { foliage: true, shadows: false, cullOnly: true }).then((ms) => ms.forEach((m) => windSway(m.material, 0.1))));
   (await Promise.allSettled(jobs)).forEach((r) => { if (r.status === 'rejected') console.warn('vegetation failed', r.reason && r.reason.message); });
 

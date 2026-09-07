@@ -6,6 +6,22 @@ import { GTAOPass } from 'three/addons/postprocessing/GTAOPass.js';
 import { UnrealBloomPass } from 'three/addons/postprocessing/UnrealBloomPass.js';
 import { OutputPass } from 'three/addons/postprocessing/OutputPass.js';
 import { SMAAPass } from 'three/addons/postprocessing/SMAAPass.js';
+import { ShaderPass } from 'three/addons/postprocessing/ShaderPass.js';
+/** A small film-style grade applied after tone mapping: lifted contrast, a touch more saturation, warm highlights and cool shadows, a soft vignette. */
+const GradeShader = {
+  uniforms: { tDiffuse: { value: null }, uContrast: { value: 1.05 }, uSaturation: { value: 1.08 }, uVignette: { value: 0.28 }, uAspect: { value: 16 / 9 } },
+  vertexShader: `varying vec2 vUv; void main() { vUv = uv; gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0); }`,
+  fragmentShader: `uniform sampler2D tDiffuse; uniform float uContrast, uSaturation, uVignette, uAspect; varying vec2 vUv;
+    void main() {
+      vec3 c = texture2D(tDiffuse, vUv).rgb;
+      c = (c - 0.5) * uContrast + 0.5;
+      float l = dot(c, vec3(0.2126, 0.7152, 0.0722)); c = mix(vec3(l), c, uSaturation);
+      c *= mix(vec3(0.96, 0.98, 1.04), vec3(1.03, 1.0, 0.96), smoothstep(0.15, 0.85, l));   // cool shadows, warm highlights
+      vec2 d = (vUv - 0.5) * 2.0; d.x *= uAspect / 1.7778;
+      c *= 1.0 - uVignette * smoothstep(0.55, 1.6, dot(d, d));
+      gl_FragColor = vec4(clamp(c, 0.0, 1.0), 1.0);
+    }`,
+};
 import { loadHDRI, loadPBR, loadGLTF, loadModel, loadTexture, prepareModel, pbrMaterial } from './assets.js';
 
 export const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
@@ -123,15 +139,16 @@ export const SUN_DIR = new THREE.Vector3(-0.45, 0.66, 0.42).normalize();   // di
 export function createRenderer(canvas, quality) {
   const renderer = new THREE.WebGLRenderer({ canvas, antialias: !quality.post, powerPreference: 'high-performance' });
   renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, quality.pr || 1));
-  renderer.shadowMap.enabled = true; renderer.shadowMap.type = THREE.PCFShadowMap;
-  renderer.toneMapping = THREE.ACESFilmicToneMapping; renderer.toneMappingExposure = 0.85;
+  renderer.shadowMap.enabled = true; renderer.shadowMap.type = quality.high || quality.post ? THREE.PCFSoftShadowMap : THREE.PCFShadowMap;
+  renderer.toneMapping = THREE.ACESFilmicToneMapping; renderer.toneMappingExposure = 0.8;
   return renderer;
 }
 export function createLights(scene, quality) {
   const sun = new THREE.DirectionalLight(0xfff3df, 3.8); sun.castShadow = true;
   const S = quality.shadow || 2048; sun.shadow.mapSize.set(S, S);
-  const sc = sun.shadow.camera; sc.left = sc.bottom = -60; sc.right = sc.top = 60; sc.near = 10; sc.far = 320;
-  sun.shadow.bias = -0.00015; sun.shadow.normalBias = 0.5; sun.shadow.radius = 1.5;
+  const R = quality.shadowRange || 40;   // a tighter box means fewer casters per frame and more texels per metre
+  const sc = sun.shadow.camera; sc.left = sc.bottom = -R; sc.right = sc.top = R; sc.near = 40; sc.far = 220;
+  sun.shadow.bias = -0.0001; sun.shadow.normalBias = 0.35; sun.shadow.radius = 2;
   scene.add(sun, sun.target);
   const hemi = new THREE.HemisphereLight(0xbcd4ff, 0x4f5a3a, 0.35); scene.add(hemi);
   return { sun, hemi };
@@ -266,7 +283,7 @@ const LOD_GROUPS = [];
  * Instances `parts` at `placements`, split into spatial cells so frustum culling works per cell, with an optional
  * low-detail `lodParts` set for distant cells (switched in updateLOD). `cullOnly` groups (grass) simply vanish beyond the near range.
  */
-export function scatterParts(scene, parts, placements, { shadows = true, lodParts = null, cell = 26, cullOnly = false, collide = 0, field = null } = {}) {
+export function scatterParts(scene, parts, placements, { shadows = true, lodParts = null, cell = 34, cullOnly = false, collide = 0, field = null, name = '' } = {}) {
   if (collide) for (const pl of placements) addCircle(pl.x, pl.z, collide * pl.s);
   if (field) for (const pl of placements) addField(field, pl.x, pl.z, pl.rot, pl.s, pl.y);
   const cells = new Map();
@@ -276,10 +293,15 @@ export function scatterParts(scene, parts, placements, { shadows = true, lodPart
     const center = new THREE.Vector3(); list.forEach((p) => center.add(new THREE.Vector3(p.x, p.y, p.z))); center.multiplyScalar(1 / list.length);
     const mk = (partList, castShadow) => partList.map((part) => { const im = new THREE.InstancedMesh(part.geometry, part.material, list.length);
       list.forEach((pl, i) => { _p.set(pl.x, pl.y, pl.z); _q.setFromAxisAngle(UP, pl.rot); _s.setScalar(pl.s); _m.compose(_p, _q, _s); im.setMatrixAt(i, _m); });
-      im.castShadow = castShadow; im.receiveShadow = true; im.computeBoundingSphere(); scene.add(im); meshes.push(im); return im; });
-    const near = mk(parts, shadows), far = lodParts ? mk(lodParts, false) : null;
+      im.castShadow = castShadow; im.receiveShadow = true; im.computeBoundingSphere(); im.name = name; im.userData.lod = partList === lodParts; scene.add(im); meshes.push(im); return im; });
+    // Shadows come from the far-LOD geometry: a shadow proxy that draws nothing (colorWrite off) but casts, so the shadow pass
+    // handles a few thousand triangles per tree instead of the full scan. The detailed mesh itself casts nothing.
+    const proxy = shadows && lodParts;
+    const near = mk(parts, shadows && !proxy), far = lodParts ? mk(lodParts, false) : null;
     if (far) far.forEach((m) => (m.visible = false));
-    LOD_GROUPS.push({ center, near, far, cullOnly });
+    let shadowProxy = null;
+    if (proxy) { shadowProxy = mk(lodParts.map((part) => ({ geometry: part.geometry, material: shadowProxyMaterial(part.material) })), true); shadowProxy.forEach((m) => { m.receiveShadow = false; m.userData.proxy = true; }); }
+    LOD_GROUPS.push({ center, near, far, cullOnly, shadowProxy });
   }
   return meshes;
 }
@@ -289,7 +311,15 @@ export function updateLOD(camPos, nearDist, farDist) {
     const nearVisible = isNear || (!g.far && d < (g.cullOnly ? nearDist * 1.25 : farDist));
     for (const m of g.near) m.visible = nearVisible;
     if (g.far) { const v = !isNear && d < farDist; for (const m of g.far) m.visible = v; }
+    if (g.shadowProxy) for (const m of g.shadowProxy) m.visible = isNear;   // far cells show the LOD itself, which does not cast
   }
+}
+const PROXY_CACHE = new Map();
+/** A material that writes no colour or depth but keeps the alpha cutout, so the object exists only for the shadow pass. */
+function shadowProxyMaterial(src) {
+  if (PROXY_CACHE.has(src)) return PROXY_CACHE.get(src);
+  const m = new THREE.MeshBasicMaterial({ map: src.map || null, alphaTest: src.alphaTest || 0, side: src.side, colorWrite: false, depthWrite: false });
+  PROXY_CACHE.set(src, m); return m;
 }
 const FIELD_CACHE = new Map();
 const fieldFor = (name, parts, opts = {}) => { const key = name + (opts.maxY !== undefined ? '@' + opts.maxY : ''); if (!FIELD_CACHE.has(key)) FIELD_CACHE.set(key, buildHeightField(parts, 0.35, opts)); return FIELD_CACHE.get(key); };
@@ -305,9 +335,9 @@ export async function scatterModel(scene, name, placements, { foliage = false, s
   const gltf = await loadModel(name);
   prepareModel(gltf.scene, { foliage, envMapIntensity });
   let lodParts = null;
-  try { const lod = await loadGLTF(`models/${name}/${name}.lod.glb`); prepareModel(lod.scene, { foliage, envMapIntensity }); lodParts = bakedParts(lod); } catch (e) { /* no LOD variant */ }
+  try { const lod = await loadGLTF(`models/${name}/${name}.lod.glb`); prepareModel(lod.scene, { foliage, envMapIntensity, alphaTest: 0.12 }); lodParts = bakedParts(lod); } catch (e) { /* no LOD variant */ }   // far cards stay solid instead of dissolving
   const parts = bakedParts(gltf);
-  return scatterParts(scene, parts, placements, { shadows, lodParts, cullOnly, collide, field: field ? fieldFor(name, parts) : null });
+  return scatterParts(scene, parts, placements, { shadows, lodParts, cullOnly, collide, field: field ? fieldFor(name, parts) : null, name });
 }
 /**
  * Card-based conifer: a tapered trunk with bark PBR plus tiers of textured twig cards. A few hundred triangles per tree,
@@ -436,11 +466,12 @@ export function createPost(renderer, scene, camera, quality) {
   const size = renderer.getSize(new THREE.Vector2()), pr = renderer.getPixelRatio();
   const composer = new EffectComposer(renderer, new THREE.WebGLRenderTarget(size.x * pr, size.y * pr, { type: THREE.HalfFloatType }));
   composer.addPass(new RenderPass(scene, camera));
-  let gtao = null;
-  if (quality.ao) { gtao = new GTAOPass(scene, camera, size.x, size.y); gtao.blendIntensity = 0.7; gtao.updateGtaoMaterial({ radius: 0.9, distanceExponent: 1, thickness: 1, scale: 1.2, samples: 12, distanceFallOff: 1 }); composer.addPass(gtao); }
-  const bloom = quality.bloom !== false ? new UnrealBloomPass(new THREE.Vector2(size.x, size.y), 0.22, 0.5, 0.92) : null; if (bloom) composer.addPass(bloom);
+  let gtao = null; const AO_SCALE = 0.5;   // ambient occlusion at half resolution: a quarter of the pixel work, the blur hides it
+  if (quality.ao) { gtao = new GTAOPass(scene, camera, size.x * AO_SCALE, size.y * AO_SCALE); gtao.blendIntensity = 0.65; gtao.updateGtaoMaterial({ radius: 0.8, distanceExponent: 1, thickness: 1, scale: 1.1, samples: 8, distanceFallOff: 1 }); composer.addPass(gtao); }
+  const bloom = quality.bloom !== false ? new UnrealBloomPass(new THREE.Vector2(size.x, size.y), 0.18, 0.55, 0.88) : null; if (bloom) composer.addPass(bloom);
   composer.addPass(new OutputPass());
+  const grade = new ShaderPass(GradeShader); composer.addPass(grade);   // display-referred colour grade: contrast, saturation, warm highlights, vignette
   const smaa = new SMAAPass(size.x * pr, size.y * pr); composer.addPass(smaa);
-  return { composer, gtao, bloom, resize(w, h) { composer.setSize(w, h); if (gtao) gtao.setSize(w, h); if (bloom) bloom.setSize(w, h); } };
+  return { composer, gtao, bloom, grade, resize(w, h) { composer.setSize(w, h); if (gtao) gtao.setSize(w * AO_SCALE, h * AO_SCALE); if (bloom) bloom.setSize(w, h); grade.uniforms.uAspect.value = w / h; } };
 }
 export const worldTime = uTime;

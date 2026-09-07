@@ -527,7 +527,7 @@ export function createGame({ scene, camera, canvas, playerChar, npcs, alpaca, re
         else el.prompt.classList.remove('show');
         input.attack = input.act = input.bolt = false; input.cast = 0;
       }
-      for (const n of npcList) { const d = n.pos.distanceTo(P.pos);
+      for (const n of npcList) { const d = n.pos.distanceTo(P.pos); n.c.root.visible = d < 90;   // skinned meshes are never frustum-culled, so hide far mentors outright
         if (d < 6) { const a = Math.atan2(P.pos.x - n.pos.x, P.pos.z - n.pos.z); n.c.heading += Math.atan2(Math.sin(a - n.c.heading), Math.cos(a - n.c.heading)) * Math.min(1, dt * 4); }
         n.c.update(dt, {}); const q = QUESTS.find((x) => x.npc === n.id); n.mark.visible = !!q && questAvailable(q) && !questDone(q) && (Q[q.id] <= 1 || Q[q.id] === 3); n.mark.position.y = 2.6 + Math.sin(now * 0.004) * 0.12;
         const sq = n.mark.visible ? null : sqForNpc(n.id); n.mark2.visible = !!sq && (SQ[sq.id] === 1 ? sqSatisfied(sq) : true); n.mark2.position.y = n.mark.position.y; }
