@@ -1,6 +1,6 @@
 // Bootstrap: renderer, sky, terrain, water, vegetation, buildings, props, characters, post-processing, then the game.
 import * as THREE from 'three';
-import { manager, loadClipLibrary } from './assets.js';
+import { manager, loadClipLibrary, initTextureSupport } from './assets.js';
 import { ZONES, zoneById, terrainH, walkable, WATER_Y, createRenderer, createLights, setupSky, buildTerrain, buildWater, scatterModel, scatterParts, conifierParts, placements, windSway, placeModel, modelSize, cottage, tower, createPost, srand, SUN_DIR, updateLOD, addCircle, resolveCollisions, createLightPool, surfaceH, rockH, COLLIDERS, addModelField, setRenderer, IMPOSTORS } from './world.js';
 import { createCharacter } from './characters.js';
 import { createGame } from './game.js';
@@ -38,7 +38,7 @@ const SKY_ROT = HDRI_AZ - PHI;
 SUN_DIR.set(Math.cos(HDRI_EL) * Math.cos(PHI), Math.sin(HDRI_EL), Math.cos(HDRI_EL) * Math.sin(PHI)).normalize();
 
 const canvas = $('c');
-const renderer = createRenderer(canvas, quality); setRenderer(renderer);
+const renderer = createRenderer(canvas, quality); setRenderer(renderer); initTextureSupport(renderer);
 const scene = new THREE.Scene();
 const camera = new THREE.PerspectiveCamera(52, 1, 0.1, 600);
 const { sun } = createLights(scene, quality);

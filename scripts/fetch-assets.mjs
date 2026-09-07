@@ -21,10 +21,11 @@ export const MANIFEST = {
     'chemistry_set', 'bunsen_burner', 'vintage_microscope', 'book_encyclopedia_set_01', 'cannon_01', 'garden_gnome'],
   files: [
     ['https://raw.githubusercontent.com/mrdoob/three.js/dev/examples/textures/waternormals.jpg', 'textures/waternormals.jpg'],
-    ['https://raw.githubusercontent.com/simondevyoutube/ThreeJS_Tutorial_ThirdPersonCamera/main/resources/zombie/mremireh_o_desbiens.fbx', 'characters/mremireh.fbx'],
-    ['https://raw.githubusercontent.com/simondevyoutube/ThreeJS_Tutorial_ThirdPersonCamera/main/resources/zombie/idle.fbx', 'characters/mremireh_idle.fbx'],
-    ['https://raw.githubusercontent.com/simondevyoutube/ThreeJS_Tutorial_ThirdPersonCamera/main/resources/zombie/walk.fbx', 'characters/mremireh_walk.fbx'],
-    ['https://cdn.jsdelivr.net/gh/simondevyoutube/ThreeJS_Tutorial_CharacterController@main/resources/dancer/girl.fbx', 'characters/girl.fbx'],
+    // Mixamo FBX sources for scripts/fbx2glb.mjs (the game loads the converted .glb)
+    ['https://raw.githubusercontent.com/simondevyoutube/ThreeJS_Tutorial_ThirdPersonCamera/main/resources/zombie/mremireh_o_desbiens.fbx', '../../sources/characters/mremireh.fbx'],
+    ['https://raw.githubusercontent.com/simondevyoutube/ThreeJS_Tutorial_ThirdPersonCamera/main/resources/zombie/idle.fbx', '../../sources/characters/mremireh_idle.fbx'],
+    ['https://raw.githubusercontent.com/simondevyoutube/ThreeJS_Tutorial_ThirdPersonCamera/main/resources/zombie/walk.fbx', '../../sources/characters/mremireh_walk.fbx'],
+    ['https://cdn.jsdelivr.net/gh/simondevyoutube/ThreeJS_Tutorial_CharacterController@main/resources/dancer/girl.fbx', '../../sources/characters/girl.fbx'],
     ['https://cdn.jsdelivr.net/gh/mrdoob/three.js@r170/examples/models/gltf/RobotExpressive/RobotExpressive.glb', 'characters/RobotExpressive.glb'],
   ],
 };
@@ -81,5 +82,5 @@ await run('models', fetchModel);
 if (!only || only === 'files') await pool(MANIFEST.files, 3, async ([url, rel]) => { await download(url, rel); console.log('file', rel); });
 if (!only || only === 'kits') for (const k of KITS) { const zip = new URL('../' + k.zip, import.meta.url).pathname, dir = new URL('../' + k.dir, import.meta.url).pathname;
   try { console.log('kit', k.game, await fetchItch(k.game, k.fileId, zip)); execSync(`unzip -q -o "${zip}" -d "${dir}"`); } catch (e) { console.error('FAIL kit', k.game, e.message); } }
-await writeFile(join(ROOT, 'LICENSES.md'), `# Asset licenses\n\n- Poly Haven models, textures and HDRI (public/assets/models, textures, hdri): CC0, https://polyhaven.com/license\n- q_*.glb models (trees, bushes, ferns, flowers, grass, rocks): Quaternius Stylized Nature MegaKit, CC0, https://quaternius.itch.io/stylized-nature-megakit\n- Soldier.glb, Michelle.glb, Xbot.glb, readyplayer.me.glb, kira.glb, waternormals.jpg: from the three.js examples (MIT; Soldier/Michelle/Xbot are Mixamo characters, usable under the Adobe Mixamo terms)\n- Ready Player Me animation clips (M_*/F_*.glb): https://github.com/readyplayerme/animation-library (see its LICENSE)\n- mremireh_o_desbiens.fbx and its clips: Mixamo character and animations, mirrored from github.com/simondevyoutube (Adobe Mixamo terms)\n- girl.fbx (public/assets/characters): Mixamo character redistributed in SimonDev's ThreeJS_Tutorial_CharacterController repository; Adobe Mixamo terms apply\n- RobotExpressive.glb: by Tomás Laulhé, CC0, via the three.js examples\n`);
+await writeFile(join(ROOT, 'LICENSES.md'), `# Asset licenses\n\n- Poly Haven models, textures and HDRI (public/assets/models, textures, hdri): CC0, https://polyhaven.com/license\n- q_*.glb models (trees, bushes, ferns, flowers, grass, rocks): Quaternius Stylized Nature MegaKit, CC0, https://quaternius.itch.io/stylized-nature-megakit\n- Soldier.glb, Michelle.glb, Xbot.glb, readyplayer.me.glb, kira.glb, waternormals.jpg: from the three.js examples (MIT; Soldier/Michelle/Xbot are Mixamo characters, usable under the Adobe Mixamo terms)\n- Ready Player Me animation clips (M_*/F_*.glb): https://github.com/readyplayerme/animation-library (see its LICENSE)\n- mremireh.glb (converted from mremireh_o_desbiens.fbx and its clips): Mixamo character and animations, mirrored from github.com/simondevyoutube (Adobe Mixamo terms)\n- girl.glb (converted from girl.fbx): Mixamo character redistributed in SimonDev's ThreeJS_Tutorial_CharacterController repository; Adobe Mixamo terms apply\n- RobotExpressive.glb: by Tomás Laulhé, CC0, via the three.js examples\n`);
 console.log('done');

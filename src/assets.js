@@ -1,8 +1,8 @@
-// Asset loading: glTF / FBX models, PBR texture sets, HDRI, animation clips with rig retargeting.
+// Asset loading: glTF models (KTX2 textures), PBR texture sets, HDRI, animation clips with rig retargeting.
 import * as THREE from 'three';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 import { DRACOLoader } from 'three/addons/loaders/DRACOLoader.js';
-import { FBXLoader } from 'three/addons/loaders/FBXLoader.js';
+import { KTX2Loader } from 'three/addons/loaders/KTX2Loader.js';
 import { HDRLoader } from 'three/addons/loaders/HDRLoader.js';
 import * as SkeletonUtils from 'three/addons/utils/SkeletonUtils.js';
 
@@ -10,7 +10,10 @@ export const manager = new THREE.LoadingManager();
 const gltfLoader = new GLTFLoader(manager);
 const dracoLoader = new DRACOLoader(manager); dracoLoader.setDecoderPath(`${import.meta.env.BASE_URL}draco/`); gltfLoader.setDRACOLoader(dracoLoader);   // decoder files copied from three/examples/jsm/libs/draco/gltf into public/draco
 if (navigator.webdriver) gltfLoader.textureLoader = new THREE.TextureLoader(manager);   // headless Chromium's ImageBitmap decoder rejects some PNGs
-const fbxLoader = new FBXLoader(manager);
+// GPU-compressed textures (KTX2 / Basis Universal) stay compressed in video memory: 4-8x less than JPG/WebP, no decode on the main thread
+const ktx2Loader = new KTX2Loader(manager); ktx2Loader.setTranscoderPath(`${import.meta.env.BASE_URL}basis/`); gltfLoader.setKTX2Loader(ktx2Loader);
+/** Must be called with the renderer before anything loads: the transcoder picks the GPU format the device supports. */
+export function initTextureSupport(renderer) { ktx2Loader.detectSupport(renderer); }
 const texLoader = new THREE.TextureLoader(manager);
 const rgbeLoader = new HDRLoader(manager);
 const cache = new Map();
@@ -24,20 +27,21 @@ export const loadModel = (name) => cached('model:' + name, async () => {
   try { return await gltfLoader.loadAsync(A(`models/${name}/${name}.glb`)); }
   catch (e) { return gltfLoader.loadAsync(A(`models/${name}/${name}.gltf`)); }
 });
-export const loadFBX = (path) => cached('fbx:' + path, () => fbxLoader.loadAsync(A(path)));
 export const loadHDRI = (path) => cached('hdr:' + path, async () => { const t = await rgbeLoader.loadAsync(A(path)); t.mapping = THREE.EquirectangularReflectionMapping; return t; });
+/** A texture by path; .ktx2 goes through the Basis transcoder, anything else through the image loader. */
 export function loadTexture(path, { srgb = false, repeat = 1, aniso = 8 } = {}) {
   return cached('tex:' + path + repeat, async () => {
-    const t = await texLoader.loadAsync(A(path));
+    const t = await (path.endsWith('.ktx2') ? ktx2Loader : texLoader).loadAsync(A(path));
     t.wrapS = t.wrapT = THREE.RepeatWrapping; t.repeat.set(repeat, repeat); t.anisotropy = aniso;
     if (srgb) t.colorSpace = THREE.SRGBColorSpace;
+    t.needsUpdate = true;
     return t;
   });
 }
-/** Poly Haven texture set: diffuse + GL normal + ARM (ao / roughness / metalness packed). */
+/** Poly Haven texture set: diffuse + GL normal + ARM (ao / roughness / metalness packed), as KTX2 (ETC1S colour, UASTC data). */
 export async function loadPBR(name, { repeat = 1, disp = false } = {}) {
   const [map, normalMap, arm] = await Promise.all([
-    loadTexture(`textures/${name}/diffuse.jpg`, { srgb: true, repeat }), loadTexture(`textures/${name}/nor_gl.jpg`, { repeat }), loadTexture(`textures/${name}/arm.jpg`, { repeat })]);
+    loadTexture(`textures/${name}/diffuse.ktx2`, { srgb: true, repeat }), loadTexture(`textures/${name}/nor_gl.ktx2`, { repeat }), loadTexture(`textures/${name}/arm.ktx2`, { repeat })]);
   const set = { map, normalMap, aoMap: arm, roughnessMap: arm, metalnessMap: arm };
   if (disp) set.displacementMap = await loadTexture(`textures/${name}/displacement.jpg`, { repeat });
   return set;

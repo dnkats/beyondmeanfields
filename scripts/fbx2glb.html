@@ -1,0 +1,24 @@
+<!doctype html><html><body><script type="module">
+// Converts a Mixamo FBX character (plus optional FBX clips) to a single .glb with embedded animations. Driven by scripts/fbx2glb.mjs.
+import * as THREE from 'three';
+import { FBXLoader } from 'three/addons/loaders/FBXLoader.js';
+import { GLTFExporter } from 'three/addons/exporters/GLTFExporter.js';
+window.convert = async (file, clips) => {
+  // textures load after the FBX parse resolves: wait for the manager, otherwise the export sees empty images
+  const manager = new THREE.LoadingManager(); const loaded = new Promise((res) => { manager.onLoad = res; });
+  const loader = new FBXLoader(manager);
+  const root = await loader.loadAsync(file);
+  await Promise.race([loaded, new Promise((res) => setTimeout(res, 20000))]);
+  const anims = root.animations || [];
+  for (const [name, url] of Object.entries(clips || {})) { const f = await loader.loadAsync(url); if (f.animations[0]) { f.animations[0].name = name; anims.push(f.animations[0]); } }
+  // drop empty takes; drop texture references whose image never loaded (the exporter refuses them)
+  const good = anims.filter((a) => a.duration > 0.1 && a.tracks.length);
+  root.traverse((o) => { if (!o.isMesh) return; for (const m of Array.isArray(o.material) ? o.material : [o.material]) for (const k of ['map', 'normalMap', 'specularMap', 'emissiveMap', 'bumpMap', 'aoMap', 'roughnessMap', 'metalnessMap', 'alphaMap']) { const t = m[k]; if (t && !(t.image && (t.image.width || t.image.naturalWidth || t.image.data))) m[k] = null; } });
+  const scene = new THREE.Scene(); scene.add(root);
+  const exporter = new GLTFExporter();
+  const buf = await exporter.parseAsync(scene, { binary: true, animations: good, onlyVisible: false, embedImages: true });
+  const bytes = new Uint8Array(buf); let s = ''; for (let i = 0; i < bytes.length; i += 0x8000) s += String.fromCharCode.apply(null, bytes.subarray(i, i + 0x8000));
+  return { b64: btoa(s), clips: good.map((a) => `${a.name} (${a.duration.toFixed(1)} s, ${a.tracks.length} tracks)`), meshes: (() => { let n = 0, t = 0; root.traverse((o) => { if (o.isMesh) { n++; const g = o.geometry; t += (g.index ? g.index.count : g.attributes.position.count) / 3; } }); return `${n} meshes, ${Math.round(t)} tris`; })() };
+};
+window.__ready = true;
+</script></body></html>

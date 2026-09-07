@@ -1,6 +1,6 @@
 // Animated characters: loading, clip assembly (own clips + retargeted Ready Player Me clips), state machine, procedural attack.
 import * as THREE from 'three';
-import { loadGLTF, loadFBX, cloneSkinned, prepareModel, rigPrefix, boneNames, retargetClip } from './assets.js';
+import { loadGLTF, cloneSkinned, prepareModel, rigPrefix, boneNames, retargetClip } from './assets.js';
 import { terrainH, resolveCollisions, surfaceH, cameraBlocked, WATER_Y } from './world.js';
 
 export const MODELS = {
@@ -8,8 +8,8 @@ export const MODELS = {
   michelle: { file: 'characters/Michelle.glb', kind: 'gltf', height: 1.72 },
   xbot:     { file: 'characters/Xbot.glb', kind: 'gltf', height: 1.8 },
   rpm:      { file: 'characters/readyplayer.me.glb', kind: 'gltf', height: 1.78 },
-  remy:     { file: 'characters/mremireh.fbx', kind: 'fbx', height: 1.8, clips: { idle: 'characters/mremireh_idle.fbx', walk: 'characters/mremireh_walk.fbx' } },
-  girl:     { file: 'characters/girl.fbx', kind: 'fbx', height: 1.7, restRetarget: true },   // Mixamo character (textured); its rest pose differs from the clip library's, so clips are retargeted relative to rest
+  remy:     { file: 'characters/mremireh.glb', kind: 'gltf', height: 1.8 },   // Mixamo FBX converted by scripts/fbx2glb.mjs, own idle and walk clips embedded
+  girl:     { file: 'characters/girl.glb', kind: 'gltf', height: 1.7, restRetarget: true },   // Mixamo character (textured); its rest pose differs from the clip library's, so clips are retargeted relative to rest
   robot:    { file: 'characters/RobotExpressive.glb', kind: 'gltf', height: 1.75, faceRot: 0 },   // three.js expressive robot: own Idle/Walking/Running/Wave/Yes clips, faces +z
 };
 const baseCache = new Map();
@@ -18,9 +18,7 @@ async function loadBase(key) {
   const p = (async () => {
     const def = MODELS[key];
     let root, anims = [];
-    if (def.kind === 'gltf') { const g = await loadGLTF(def.file); root = g.scene; anims = g.animations; }
-    else { root = await loadFBX(def.file); anims = root.animations || [];
-      for (const [name, file] of Object.entries(def.clips || {})) { try { const f = await loadFBX(file); if (f.animations[0]) { f.animations[0].name = name; anims.push(f.animations[0]); } } catch (e) { console.warn('clip', file, e); } } }
+    const g = await loadGLTF(def.file); root = g.scene; anims = g.animations;
     prepareModel(root, { envMapIntensity: 0.9 });
     root.updateMatrixWorld(true);
     const box = new THREE.Box3().setFromObject(root), size = box.getSize(new THREE.Vector3());
