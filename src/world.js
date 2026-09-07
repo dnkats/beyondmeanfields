@@ -35,6 +35,8 @@ let seed = 20260905;
 export const srand = () => { seed = (seed * 1664525 + 1013904223) >>> 0; return seed / 4294967296; };
 
 // ------------------------------------------------------------ zones & terrain function
+/** Island half-axes (m) and the size of the terrain plane; the coast is where the quartic falloff meets the water. */
+export const ISLAND = { a: 118, b: 108, size: 270 };
 export const ZONES = [
   { id: 'harbor', name: 'Input Harbor',        x: 0,   z: 58,  r: 14, h: 1.6 },
   { id: 'fields', name: 'Hartree–Fock Fields', x: -46, z: 22,  r: 17, h: 2.4 },
@@ -43,14 +45,20 @@ export const ZONES = [
   { id: 'caves',  name: 'FCIDUMP Caves',       x: 46,  z: 12,  r: 14, h: 3.0 },
   { id: 'ridge',  name: 'Open-Shell Ridge',    x: 36,  z: -36, r: 14, h: 6.5 },
   { id: 'tower',  name: 'Tower of (T)',        x: 0,   z: -60, r: 13, h: 9.5 },
+  { id: 'lagoon', name: 'Localization Lagoon', x: -74, z: -8,  r: 13, h: 1.5 },
+  { id: 'marsh',  name: 'Transcorrelated Marsh', x: 72, z: -22, r: 14, h: 1.3 },
+  { id: 'cape',   name: 'Convergence Cape',    x: -40, z: 78,  r: 13, h: 4.5 },
 ];
 export const zoneById = (id) => ZONES.find((z) => z.id === id);
 export const WATER_Y = 0.45;
 export function terrainH(x, z) {
-  const rr = Math.hypot(x / 86, z / 82);
+  const rr = Math.hypot(x / ISLAND.a, z / ISLAND.b);
   const island = clamp(1 - rr * rr * rr * rr, 0, 1);
   let h = island * (2.6 + 1.5 * Math.sin(x * 0.06) * Math.cos(z * 0.05) + 0.9 * Math.sin(x * 0.15 + 1) * Math.sin(z * 0.12) + 0.5 * Math.sin(x * 0.31) * Math.cos(z * 0.27) + 0.18 * Math.sin(x * 0.9) * Math.cos(z * 0.8))
-        + island * (9 * Math.exp(-(x * x + (z + 60) * (z + 60)) / 520) + 5 * Math.exp(-((x - 36) ** 2 + (z + 36) ** 2) / 420) + 2.5 * Math.exp(-((x - 46) ** 2 + (z - 12) ** 2) / 300))
+        + island * (9 * Math.exp(-(x * x + (z + 60) * (z + 60)) / 520) + 5 * Math.exp(-((x - 36) ** 2 + (z + 36) ** 2) / 420) + 2.5 * Math.exp(-((x - 46) ** 2 + (z - 12) ** 2) / 300)
+                    + 4 * Math.exp(-((x + 40) ** 2 + (z - 78) ** 2) / 420))   // the headland of Convergence Cape
+        - 5.5 * Math.exp(-((x + 86) ** 2 + (z + 24) ** 2) / 130)                 // the lagoon: a pond behind the boatyard
+        - 2.6 * Math.exp(-((x - 84) ** 2 + (z + 36) ** 2) / 70) - 2.4 * Math.exp(-((x - 60) ** 2 + (z + 40) ** 2) / 60)   // marsh pools
         - 3.2 * (1 - island);
   for (const zn of ZONES) { const d = Math.hypot(x - zn.x, z - zn.z); if (d < zn.r) h = lerp(zn.h, h, smooth(zn.r * 0.55, zn.r, d)); }
   return h;
@@ -176,19 +184,19 @@ export async function setupSky(scene, hdriRotationY) {
   scene.background = hdr; scene.environment = hdr;
   scene.backgroundRotation.set(0, hdriRotationY, 0); scene.environmentRotation.set(0, hdriRotationY, 0);
   scene.environmentIntensity = 0.7; scene.backgroundIntensity = 1.0;
-  scene.fog = new THREE.Fog(0xd3dfee, 70, 260);
+  scene.fog = new THREE.Fog(0xd3dfee, 80, 300);
   return hdr;
 }
 
 // ------------------------------------------------------------ terrain mesh with PBR splat shader
 const uTime = { value: 0 };
 export function heightTexture() {
-  const N = 256, data = new Uint16Array(N * N);
-  for (let j = 0; j < N; j++) for (let i = 0; i < N; i++) data[j * N + i] = THREE.DataUtils.toHalfFloat(terrainH((i / (N - 1) - 0.5) * 200, (j / (N - 1) - 0.5) * 200));
+  const N = 256, data = new Uint16Array(N * N), S = ISLAND.size;
+  for (let j = 0; j < N; j++) for (let i = 0; i < N; i++) data[j * N + i] = THREE.DataUtils.toHalfFloat(terrainH((i / (N - 1) - 0.5) * S, (j / (N - 1) - 0.5) * S));
   const t = new THREE.DataTexture(data, N, N, THREE.RedFormat, THREE.HalfFloatType); t.minFilter = t.magFilter = THREE.LinearFilter; t.needsUpdate = true; return t;
 }
 export async function buildTerrain(scene, quality) {
-  const N = quality.terrainN || 160, SIZE = 200;
+  const N = quality.terrainN || 160, SIZE = ISLAND.size;
   const geo = new THREE.PlaneGeometry(SIZE, SIZE, N, N); geo.rotateX(-Math.PI / 2);
   const pos = geo.attributes.position;
   for (let i = 0; i < pos.count; i++) pos.setY(i, terrainH(pos.getX(i), pos.getZ(i)));
@@ -255,12 +263,12 @@ export async function buildWater(scene, hdr, hdriRotationY, quality) {
   const mat = new THREE.ShaderMaterial({ transparent: true, depthWrite: false,
     uniforms: { uTime, tN: { value: normals }, tSky: { value: hdr }, tH: { value: heightTexture() }, uSkyRot: { value: hdriRotationY }, uSunDir: { value: SUN_DIR },
       uShallow: { value: new THREE.Color(0x2f8fb8).convertSRGBToLinear() }, uDeep: { value: new THREE.Color(0x0e3f6f).convertSRGBToLinear() },
-      uFog: { value: fog.color }, uFogNear: { value: fog.near }, uFogFar: { value: fog.far }, uWaterY: { value: WATER_Y } },
+      uFog: { value: fog.color }, uFogNear: { value: fog.near }, uFogFar: { value: fog.far }, uWaterY: { value: WATER_Y }, uTerrainSize: { value: ISLAND.size } },
     vertexShader: `uniform float uTime; varying vec3 vW; varying vec2 vUvW;
       void main(){ vec3 p = position; float a = p.x * 0.18 + uTime * 0.9, b = p.y * 0.15 - uTime * 0.7;
         p.z += sin(a) * 0.07 + cos(b) * 0.07 + sin((p.x + p.y) * 0.5 + uTime * 1.6) * 0.025;
         vec4 w = modelMatrix * vec4(p, 1.0); vW = w.xyz; gl_Position = projectionMatrix * viewMatrix * w; }`,
-    fragmentShader: `uniform float uTime, uSkyRot, uFogNear, uFogFar, uWaterY; uniform sampler2D tN, tSky, tH; uniform vec3 uSunDir, uShallow, uDeep, uFog; varying vec3 vW;
+    fragmentShader: `uniform float uTime, uSkyRot, uFogNear, uFogFar, uWaterY, uTerrainSize; uniform sampler2D tN, tSky, tH; uniform vec3 uSunDir, uShallow, uDeep, uFog; varying vec3 vW;
       vec2 equirect(vec3 d){ return vec2(atan(d.z, d.x) / 6.28318 + 0.5, asin(clamp(d.y, -1.0, 1.0)) / 3.14159 + 0.5); }
       vec3 rotY(vec3 v, float a){ float c = cos(a), s = sin(a); return vec3(c * v.x + s * v.z, v.y, -s * v.x + c * v.z); }
       void main(){
@@ -271,7 +279,7 @@ export async function buildWater(scene, hdr, hdriRotationY, quality) {
         float fres = pow(1.0 - max(dot(V, N), 0.0), 3.0);
         vec3 R = reflect(-V, N); R.y = abs(R.y);
         vec3 sky = texture2D(tSky, equirect(rotY(R, -uSkyRot))).rgb;
-        float ground = texture2D(tH, vW.xz / 200.0 + 0.5).r; float depth = clamp((uWaterY - ground) / 3.0, 0.0, 1.0);
+        float ground = texture2D(tH, vW.xz / uTerrainSize + 0.5).r; float depth = clamp((uWaterY - ground) / 3.0, 0.0, 1.0);
         vec3 col = mix(uShallow, uDeep, depth);
         col = mix(col, sky, 0.25 + 0.7 * fres);
         vec3 H = normalize(V + uSunDir); float spec = pow(max(dot(N, H), 0.0), 320.0);
@@ -405,7 +413,7 @@ export function placements(count, { minH = 1.2, maxH = 8.5, maxSlope = 0.6, avoi
     tries++;
     let x, z;
     if (near) { const a = srand() * 6.283, r = near.r0 + srand() * (near.r1 - near.r0); x = near.x + Math.cos(a) * r; z = near.z + Math.sin(a) * r; }
-    else { x = srand() * 176 - 88; z = srand() * 168 - 84; }
+    else { x = (srand() * 2 - 1) * ISLAND.a; z = (srand() * 2 - 1) * ISLAND.b; }
     const h = terrainH(x, z); if (h < minH || h > maxH || slopeAt(x, z) > maxSlope) continue;
     if (avoidZones && ZONES.some((zn) => Math.hypot(x - zn.x, z - zn.z) < zn.r * zoneMargin)) continue;
     if (exclude.some((e) => Math.hypot(x - e.x, z - e.z) < e.r)) continue;
@@ -475,6 +483,31 @@ export async function cottage(scene, x, z, { w = 5, d = 4.2, h = 2.9, rot = 0, r
   for (const [px, pz, ry] of [[w * 0.2, d / 2 + 0.05, 0], [w / 2 + 0.05, 0, Math.PI / 2], [-w / 2 - 0.05, 0.6, Math.PI / 2]]) { const win = new THREE.Mesh(new THREE.BoxGeometry(0.9, 0.9, 0.08), glass); win.position.set(px, 1.6, pz); win.rotation.y = ry; g.add(win);
     const frame = box(1.05, 1.05, 0.1, woodM, 0.8); frame.position.copy(win.position).add(new THREE.Vector3(0, 0, ry ? 0 : -0.02)); frame.rotation.y = ry; g.add(frame); win.position.z += ry ? 0 : 0.02; }
   g.position.set(x, terrainH(x, z) - 0.15, z); g.rotation.y = rot; scene.add(g); addBox(x, z, w + 0.5, d + 0.5, rot); return g;
+}
+/** The lighthouse on Convergence Cape: a white stuccoed shaft with red bands, a glass lantern room and a slate cap. Its lamp is the pooled light's job. */
+export async function lighthouse(scene, x, z, h0) {
+  const g = new THREE.Group();
+  const [stucco, slate, wood, brick] = await Promise.all([tex('white_stucco', 1), tex('roof_slates_02', 1), tex('dark_wood', 1), tex('castle_brick_02_red', 1)]);
+  const red = new THREE.MeshStandardMaterial({ color: 0xa8342c, roughness: 0.8 });
+  const body = new THREE.Mesh(scaleUV(new THREE.CylinderGeometry(2.1, 2.7, 13, 20, 1, true), 6, 4), stucco); body.position.y = 6.5; body.castShadow = true; body.receiveShadow = true; g.add(body);
+  for (const y of [3.5, 8.5]) { const band = new THREE.Mesh(new THREE.CylinderGeometry(2.7 - y * 0.046 + 0.03, 2.7 - (y - 1.6) * 0.046 + 0.03, 1.6, 20, 1, true), red); band.position.y = y; g.add(band); }
+  const base = new THREE.Mesh(scaleUV(new THREE.CylinderGeometry(3.2, 3.4, 1.2, 20), 8, 0.6), brick); base.position.y = 0.6; base.receiveShadow = true; g.add(base);
+  const gallery = new THREE.Mesh(scaleUV(new THREE.CylinderGeometry(2.8, 2.8, 0.5, 20), 8, 0.3), slate); gallery.position.y = 13.2; gallery.castShadow = true; g.add(gallery);
+  const lampMat = new THREE.MeshPhysicalMaterial({ color: 0xfff0c0, emissive: 0xffc860, emissiveIntensity: 1.6, roughness: 0.15, metalness: 0, transparent: true, opacity: 0.85 });
+  const lamp = new THREE.Mesh(new THREE.CylinderGeometry(1.5, 1.5, 2.2, 16, 1, true), lampMat); lamp.position.y = 14.6; g.add(lamp);
+  for (let i = 0; i < 8; i++) { const a = i / 8 * 6.283; const post = new THREE.Mesh(new THREE.BoxGeometry(0.14, 2.3, 0.14), red); post.position.set(Math.cos(a) * 1.55, 14.6, Math.sin(a) * 1.55); g.add(post); }
+  const roof = new THREE.Mesh(scaleUV(new THREE.ConeGeometry(2.2, 2.4, 16, 1, true), 6, 2), slate); roof.position.y = 16.9; roof.castShadow = true; g.add(roof);
+  const door = box(1.3, 2.2, 0.2, wood, 0.6); door.position.set(0, 1.1 + 1.2, 2.65); g.add(door);
+  g.position.set(x, h0 - 0.2, z); scene.add(g); addCircle(x, z, 3.3); return g;
+}
+/** A waystone: a leaning standing stone with a glowing rune face. Interacting with one opens fast travel between visited zones. */
+export function waystone(scene, x, z, runeTex = null) {
+  const g = new THREE.Group();
+  const stone = new THREE.Mesh(new THREE.BoxGeometry(0.7, 2.4, 0.5), new THREE.MeshStandardMaterial({ color: 0x5e6472, roughness: 0.9 })); stone.position.y = 1.15; stone.rotation.z = 0.06; stone.castShadow = true; stone.receiveShadow = true; g.add(stone);
+  const cap = new THREE.Mesh(new THREE.BoxGeometry(0.5, 0.35, 0.4), stone.material); cap.position.set(0.04, 2.5, 0); cap.rotation.z = 0.2; g.add(cap);
+  const rune = new THREE.Mesh(new THREE.PlaneGeometry(0.55, 0.55), new THREE.MeshBasicMaterial({ map: runeTex, color: 0x9fd8ff, transparent: true, opacity: 0.9, depthWrite: false })); rune.position.set(0.03, 1.55, 0.26); g.add(rune);
+  const y = terrainH(x, z); g.position.set(x, y - 0.1, z); g.rotation.y = srand() * 6.283; scene.add(g); addCircle(x, z, 0.5);
+  g.userData.rune = rune; return g;
 }
 export async function tower(scene, x, z, h0) {
   const g = new THREE.Group();

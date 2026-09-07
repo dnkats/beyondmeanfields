@@ -12,11 +12,13 @@ O₂ triplet, formaldehyde's n→π* ghost, benzene, naphthalene, caffeine from 
 correlation) whose card tells you what they fear. Spells are crafted at a jlmol-style workbench that writes the ElemCo input
 live; the inputs that converge are collected in a grimoire.
 
-Beyond the main line, eleven mentors offer **trials** (side quests) that teach options and advanced settings. Every trial
+Beyond the main line, fourteen mentors offer **trials** (side quests) that teach options and advanced settings. Every trial
 ends in a fight: a creature appears near the mentor once you have accepted (and, for some, answered the mentor's
 questions), and the killing cast must carry what the trial is about, such as `cc shiftp`, `wf store`, `wf core=:none`,
 `cc usedf=false`, a per-element basis like `vdz; O=avdz`, a UHF spin setting or an active space. Trials pay XP, extra HP or
 mana, and write a lesson into the grimoire.
+
+Three outer zones hold the later trials: **Convergence Cape** with its lighthouse (the N₂ dissociation curve from 1.1 to 2.5 Å, where each method breaks in turn, and the basis ladder vdz → vtz → vqz), **Localization Lagoon** (`@localize`, IBO / Pipek–Mezey / Boys, and what it does to stored integrals) and the **Transcorrelated Marsh** (non-Hermitian `ST=1` FCIDUMPs, `@bohf` and `@transform_ints`, why `(T)` needs its Λ variant there). Radical Rhea hands out the two-determinant spell `@cc 2d-dcsd` with `wf occa` / `occb` for the open-shell singlet methylene, and the Alpaca asks for `@dfcc svd-dcsd`. Every zone has a **waystone**; once you have stood next to one it answers the others, so travel across the island is a menu away.
 
 The island is also populated by a **wild population** of molecules drawn from a database in `src/spells.js` (`ENCOUNTERS`
 and `WILD`): helium and dihydrogen at the harbour, ammonia, methane and HF in the fields, CO, acetylene, ethylene and F₂ in

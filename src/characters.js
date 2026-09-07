@@ -1,7 +1,7 @@
 // Animated characters: loading, clip assembly (own clips + retargeted Ready Player Me clips), state machine, procedural attack.
 import * as THREE from 'three';
 import { loadGLTF, cloneSkinned, prepareModel, rigPrefix, boneNames, retargetClip } from './assets.js';
-import { terrainH, resolveCollisions, surfaceH, cameraBlocked, WATER_Y } from './world.js';
+import { terrainH, resolveCollisions, surfaceH, cameraBlocked, WATER_Y, ISLAND } from './world.js';
 
 export const MODELS = {
   soldier:  { file: 'characters/Soldier.glb', kind: 'gltf', height: 1.8 },
@@ -138,7 +138,7 @@ export function createPlayerController(character, cam, keys, input, stick) {
       // Terrain steps up to 0.55 are walkable, rock steps up to 0.4. Stepping from the ground onto rock is gated at the rim: it must be low there
       // and not rise past 0.5 within the next 35 cm, otherwise it is a wall you jump onto or walk around. Once on a rock you can move anywhere on it.
       const onRock = h0 > terrainH(px0, pz0) + 0.05, ml = Math.max(1e-4, Math.hypot(mx, mz)), lx = mx / ml * 0.35, lz = mz / ml * 0.35;
-      const can = (x, z) => { if (!walkable(x, z) || Math.hypot(x, z) >= 95) return false; const h = surfaceH(x, z), th = terrainH(x, z), rock = h > th + 0.05;
+      const can = (x, z) => { if (!walkable(x, z) || Math.hypot(x / ISLAND.a, z / ISLAND.b) >= 1.03) return false; const h = surfaceH(x, z), th = terrainH(x, z), rock = h > th + 0.05;
         if (h - footY > (rock ? 0.4 : 0.55)) return false;
         if (P.onGround && h0 - h > 1.2) return false;   // no walking off a ledge higher than a jump: leap off deliberately
         if (rock && P.onGround && !onRock) { if (h - th > 0.4) return false; const ah = surfaceH(x + lx, z + lz); if (ah - terrainH(x + lx, z + lz) > 0.5) return false; } return true; };

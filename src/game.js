@@ -14,7 +14,7 @@ const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
 function storage(key, val) { try { if (val === undefined) return localStorage.getItem(key); localStorage.setItem(key, val); } catch (e) { return null; } }
 const esc = (s) => String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;');
 
-export function createGame({ scene, camera, canvas, playerChar, npcs, alpaca, renderFrame, quality, sun, workbench, sigils, lights }) {
+export function createGame({ scene, camera, canvas, playerChar, npcs, alpaca, renderFrame, quality, sun, workbench, sigils, lights, waystones = [] }) {
   const el = {}; ['hud', 'zone', 'hpbar', 'hpval', 'xpbar', 'xpval', 'manabar', 'manaval', 'qtitle', 'qobj', 'items', 'compass', 'prompt', 'toast', 'dlg', 'dsw', 'dname', 'dtext', 'dcode', 'dchoices', 'dnext', 'overlay', 'panel', 'bossbar', 'bosshp', 'bossname', 'keys', 'hotbar', 'enc', 'encname', 'encformula', 'enctells', 'enchp', 'encres', 'crosshair'].forEach((k) => (el[k] = $(k)));
 
   // ---------------- input
@@ -98,7 +98,7 @@ export function createGame({ scene, camera, canvas, playerChar, npcs, alpaca, re
 
   // ---------------- player state
   const P = createPlayerController(playerChar, cam, keys, input, stick);
-  Object.assign(P, { hp: 100, xp: 0, items: [], mana: 100, unlocked: ['hf'], hotbar: Array(9).fill(null), solved: {}, hpBonus: 0, manaBonus: 0, lessons: {} });
+  Object.assign(P, { hp: 100, xp: 0, items: [], mana: 100, unlocked: ['hf'], hotbar: Array(9).fill(null), solved: {}, hpBonus: 0, manaBonus: 0, lessons: {}, visited: [] });
   const level = () => Math.floor(P.xp / 100) + 1;
   const maxHP = () => 100 + 15 * (level() - 1) + P.hpBonus;
   const maxMana = () => 100 + 10 * (level() - 1) + P.manaBonus;
@@ -267,7 +267,7 @@ export function createGame({ scene, camera, canvas, playerChar, npcs, alpaca, re
   const sqSatisfied = (sq) => { const pr = SQP[sq.id] || { kills: 0, hits: 0 }; if (sq.type === 'craft') return craftSatisfied(sq); if (sq.type === 'quiz') return true; return sq.hitOnly ? pr.hits >= 1 : pr.kills >= (sq.spawn || []).length; };
   function sqComplete(sq) {
     SQ[sq.id] = 2; const r = sq.reward || {}; P.xp += r.xp || 0; if (r.hp) { P.hpBonus += r.hp; P.hp = Math.min(maxHP(), P.hp + r.hp); } if (r.mana) { P.manaBonus += r.mana; P.mana = Math.min(maxMana(), P.mana + r.mana); }
-    if (sq.lesson) P.lessons[sq.id] = sq.lesson; Sfx.quest(); toast(`Trial complete: ${sq.title}  +${r.xp || 0} XP${r.hp ? ` · +${r.hp} max HP` : ''}${r.mana ? ` · +${r.mana} max mana` : ''}`, 'green'); saveGame();
+    if (sq.lesson) P.lessons[sq.id] = sq.lesson; if (r.spells) unlock(r.spells); Sfx.quest(); toast(`Trial complete: ${sq.title}  +${r.xp || 0} XP${r.hp ? ` · +${r.hp} max HP` : ''}${r.mana ? ` · +${r.mana} max mana` : ''}`, 'green'); saveGame();
   }
   /** Builds the dialogue nodes for a side quest on demand and returns the id of the node to show now. */
   function sqNode(sq) {
@@ -283,7 +283,8 @@ export function createGame({ scene, camera, canvas, playerChar, npcs, alpaca, re
         D[stId] = { who, text: step.q, code: step.code, choices: step.choices.map((c, i) => { const wid = `${stId}:w${i}`; if (!c.ok) D[wid] = { who, text: c.why, next: stId }; return { t: c.t, next: c.ok ? next : wid, ok: !!c.ok }; }) }; }
       const acceptNext = steps.length ? base + ':q0' : base + ':go';
       const crafty = sq.requireExtras || sq.requireOpts || sq.requireBasis;
-      D[base + ':accept'] = { who, text: sq.type === 'quiz' ? 'Then think it through.' : sq.type === 'craft' ? 'Craft it at a workbench or with Tab, bind it to a slot, and come back.' : crafty ? 'Craft the spell with Tab, bind it to a hotbar slot, and cast that slot on the creature. Your bound spells keep their settings.' : 'Take this with you.', next: acceptNext, run: () => { SQ[sq.id] = 1; saveGame(); } };
+      D[base + ':accept'] = { who, text: sq.type === 'quiz' ? 'Then think it through.' : sq.type === 'craft' ? 'Craft it at a workbench or with Tab, bind it to a slot, and come back.' : crafty ? 'Craft the spell with Tab, bind it to a hotbar slot, and cast that slot on the creature. Your bound spells keep their settings.' : 'Take this with you.', next: acceptNext,
+        run: () => { SQ[sq.id] = 1; if (sq.grant) { unlock(sq.grant); toast(`New spell: ${sq.grant.map((s) => SPELLS[s].name).join(', ')}. Craft it with Tab.`, 'blue'); } saveGame(); } };
       D[base + ':offer'] = { who, text: `A trial, if you want it: ${sq.title}. ${sq.intro.text}`, code: sq.intro.code, choices: [{ t: 'Accept the trial', next: base + ':accept', ok: true }, { t: 'Not now', next: base + ':later' }] };
       D[base + ':later'] = { who, text: 'It keeps. Come back when you have the mana.' };
       D[base + ':hint'] = { who, text: sq.hint || 'Not yet.' };
@@ -365,6 +366,7 @@ export function createGame({ scene, camera, canvas, playerChar, npcs, alpaca, re
   function updateHUD(dt, target) {
     hudT -= dt; if (hudT > 0) return; hudT = 0.1;
     const zn = zoneAt(P.pos.x, P.pos.z); setIf('zone', el.zone, 'textContent', zn ? zn.name : 'The wilds');
+    if (zn && !P.visited.includes(zn.id)) { P.visited.push(zn.id); if (P.visited.length > 1) toast(`${zn.name}: its waystone now answers the others.`, 'blue'); }
     setIf('hpw', el.hpbar.style, 'width', (100 * clamp(P.hp / maxHP(), 0, 1)).toFixed(0) + '%'); setIf('hp', el.hpval, 'textContent', `${Math.max(0, Math.round(P.hp))} / ${maxHP()}`);
     setIf('xpw', el.xpbar.style, 'width', (P.xp % 100) + '%'); setIf('xp', el.xpval, 'textContent', `lvl ${level()}`);
     setIf('mw', el.manabar.style, 'width', (100 * clamp(P.mana / maxMana(), 0, 1)).toFixed(0) + '%'); setIf('mana', el.manaval, 'textContent', `${Math.round(P.mana)} / ${maxMana()}`);
@@ -384,10 +386,10 @@ export function createGame({ scene, camera, canvas, playerChar, npcs, alpaca, re
   const showOverlay = (html) => { el.panel.innerHTML = html; el.overlay.hidden = false; unlockPointer(); };
   const plainPanel = () => el.panel.classList.remove('grimoire');
   const hideOverlay = () => { el.overlay.hidden = true; canvas.focus(); };
-  function saveGame() { storage('ci.save', JSON.stringify({ v: 2, Q, SQ, SQP, xp: P.xp, hp: P.hp, mana: P.mana, items: P.items, unlocked: P.unlocked, hotbar: P.hotbar, solved: P.solved, lessons: P.lessons, hpBonus: P.hpBonus, manaBonus: P.manaBonus, drafts: P.drafts || {}, pos: [P.pos.x, P.pos.z] })); }
+  function saveGame() { storage('ci.save', JSON.stringify({ v: 2, Q, SQ, SQP, xp: P.xp, hp: P.hp, mana: P.mana, items: P.items, unlocked: P.unlocked, hotbar: P.hotbar, solved: P.solved, lessons: P.lessons, hpBonus: P.hpBonus, manaBonus: P.manaBonus, drafts: P.drafts || {}, visited: P.visited, pos: [P.pos.x, P.pos.z] })); }
   function loadGame() {
     try { const s = JSON.parse(storage('ci.save') || 'null'); if (!s || s.v !== 2) return false;
-      Object.assign(Q, s.Q); Object.assign(SQ, s.SQ || {}); Object.assign(SQP, s.SQP || {}); P.xp = s.xp; P.hp = s.hp; P.mana = s.mana ?? 100; P.items = s.items || []; P.unlocked = s.unlocked || ['hf']; P.hotbar = s.hotbar || Array(9).fill(null); P.solved = s.solved || {}; P.lessons = s.lessons || {}; P.hpBonus = s.hpBonus || 0; P.manaBonus = s.manaBonus || 0; P.drafts = s.drafts || {}; P.pos.set(s.pos[0], 0, s.pos[1]);
+      Object.assign(Q, s.Q); Object.assign(SQ, s.SQ || {}); Object.assign(SQP, s.SQP || {}); P.xp = s.xp; P.hp = s.hp; P.mana = s.mana ?? 100; P.items = s.items || []; P.unlocked = s.unlocked || ['hf']; P.hotbar = s.hotbar || Array(9).fill(null); P.solved = s.solved || {}; P.lessons = s.lessons || {}; P.hpBonus = s.hpBonus || 0; P.manaBonus = s.manaBonus || 0; P.drafts = s.drafts || {}; P.visited = s.visited || []; P.pos.set(s.pos[0], 0, s.pos[1]);
       for (const sq of SIDE_QUESTS) if (SQ[sq.id] === 1 && sq.spawn && SQP[sq.id] && !sqSatisfied(sq)) sqSpawn(sq, true);
       const respawn = { pro: ['prologue', () => spawnEncounter('hatom', 'harbor', 9, 9, 'pro')], ladder: ['ladder', () => { spawnEncounter('water', 'forest', -8, 5, 'ladder'); spawnEncounter('n2eq', 'forest', 7, 8, 'ladder'); }],
         dumps: ['dumps', () => { spawnEncounter('lih', 'caves', -6, 7, 'dumps'); spawnEncounter('h2str', 'caves', 6, 8, 'dumps'); spawnEncounter('n2dump', 'caves', 9, -8, 'dumps'); }],
@@ -400,7 +402,7 @@ export function createGame({ scene, camera, canvas, playerChar, npcs, alpaca, re
       renderHotbar(); return true; } catch (e) { return false; }
   }
   function startGame(cont) {
-    Sfx.init(); if (!cont) { Object.keys(Q).forEach((k) => (Q[k] = 0)); Object.keys(SQ).forEach((k) => delete SQ[k]); Object.keys(SQP).forEach((k) => delete SQP[k]); P.xp = 0; P.items = []; P.unlocked = ['hf']; P.hotbar = Array(9).fill(null); P.solved = {}; P.lessons = {}; P.hpBonus = 0; P.manaBonus = 0; P.drafts = {}; P.mana = 100; resetWild(); const hb = zoneById('harbor'); P.pos.set(hb.x, 0, hb.z + 8); P.hp = 100; P.c.heading = Math.PI; }
+    Sfx.init(); if (!cont) { Object.keys(Q).forEach((k) => (Q[k] = 0)); Object.keys(SQ).forEach((k) => delete SQ[k]); Object.keys(SQP).forEach((k) => delete SQP[k]); P.xp = 0; P.items = []; P.unlocked = ['hf']; P.hotbar = Array(9).fill(null); P.solved = {}; P.lessons = {}; P.hpBonus = 0; P.manaBonus = 0; P.drafts = {}; P.visited = []; P.mana = 100; resetWild(); const hb = zoneById('harbor'); P.pos.set(hb.x, 0, hb.z + 8); P.hp = 100; P.c.heading = Math.PI; }
     state = 'play'; el.hud.hidden = false; hideOverlay(); cam.yaw = 0; cam.pos.set(P.pos.x, P.pos.y + 4, P.pos.z + 6); renderHotbar(); saveGame();
   }
   function clearEncounters() { for (const e of encs) { if (e.g.userData.light && lights) lights.release(e.g.userData.light); scene.remove(e.g); } encs.length = 0; P.target = null; resetWild(); }
@@ -410,7 +412,7 @@ export function createGame({ scene, camera, canvas, playerChar, npcs, alpaca, re
       <p>Correlation is the enemy. You start with the mean field, learn to fit it, then climb the ladder: MP2, coupled cluster, distinguishable cluster, triples, low-rank triples, excited states, active spaces, selected CI, regions. Every spell is a real ElemCo input crafted at a jlmol workbench, and every creature is a real molecule that tells you which spell it fears.</p>
       <div class="ctrls"><div><b>Mouse:</b> click the ground to walk, double-click to run</div><div>click people, creatures and objects to use them · right-click a creature to cast · drag to look, wheel to zoom</div><div><b>Mouse steering</b> (<kbd>C</kbd> or the menu): the mouse turns you, <kbd>W</kbd> goes where you look, the crosshair picks what you click</div><div><b>Keys:</b> <kbd>W</kbd><kbd>A</kbd><kbd>S</kbd><kbd>D</kbd> move · <kbd>shift</kbd> run · <kbd>space</kbd> jump · <kbd>E</kbd> talk · <kbd>F</kbd> staff · <kbd>1</kbd>–<kbd>9</kbd> cast</div><div><kbd>Tab</kbd> spellbook and workbench · <kbd>J</kbd> quest log · <kbd>Esc</kbd> menu</div></div>
       <div class="actions">${has ? '<button class="cta" id="cont">Continue</button>' : ''}<button class="cta ${has ? 'ghost' : ''}" id="new">New game</button><span class="note">saved in this browser · graphics preset: ${quality.name}</span></div>
-      <div class="credit">Made for <a href="https://github.com/fkfest/ElemCo.jl">ElemCo.jl</a> and <a href="https://github.com/fkfest/jlmol">jlmol</a>. Assets: Poly Haven (CC0), Mixamo characters via the three.js examples, Ready Player Me animations.</div>`);
+      <div class="credit">Made for <a href="https://github.com/fkfest/ElemCo.jl">ElemCo.jl</a> and <a href="https://github.com/fkfest/jlmol">jlmol</a>. Assets: Poly Haven and Quaternius (CC0), Mixamo characters via the three.js examples, Ready Player Me animations.</div>`);
     if (has) $('cont').addEventListener('click', () => { if (loadGame()) startGame(true); else startGame(false); });
     $('new').addEventListener('click', () => startGame(false));
   }
@@ -441,7 +443,8 @@ export function createGame({ scene, camera, canvas, playerChar, npcs, alpaca, re
     if (forgeSlot === null) forgeSlot = (P.drafts && P.drafts[forgeSel]) || !slotsOf.length ? -1 : slotsOf.includes(P.activeSlot || 0) ? (P.activeSlot || 0) : slotsOf[slotsOf.length - 1];   // an unbound draft you were typing comes first
     const slot = forgeSlot, cur = slot >= 0 ? P.hotbar[slot] : null;
     const opts = cur ? { ...cur.opts } : (P.drafts && P.drafts[forgeSel]) ? { ...P.drafts[forgeSel] } : defaultOpts(forgeSel);
-    const optField = (k) => { const v = opts[k] ?? OPT_DEFAULTS[k]; const help = { ms2: 'wf ms2: twice the spin projection (doublet 1, triplet 2)', nstates: 'eom nstates: how many excited states', active: 'wf active: "(electrons, orbitals)"', epsilon: 'ciphi epsilon: selection threshold, smaller is tighter', centers: '@region centres: atom indices or labels, e.g. [1, 2] or [:O1]' }[k];
+    const optField = (k) => { const v = opts[k] ?? OPT_DEFAULTS[k]; const help = { ms2: 'wf ms2: twice the spin projection (doublet 1, triplet 2)', nstates: 'eom nstates: how many excited states', active: 'wf active: "(electrons, orbitals)"', epsilon: 'ciphi epsilon: selection threshold, smaller is tighter', centers: '@region centres: atom indices or labels, e.g. [1, 2] or [:O1]',
+      occa: 'wf occa: occupied α orbitals, e.g. 1-3+4 (orbital 4 is α-only)', occb: 'wf occb: occupied β orbitals, e.g. 1-3+5 (orbital 5 is β-only)' }[k];
       return `<label>${help}<input data-opt="${k}" value="${esc(String(v))}"></label>`; };
     el.panel.classList.add('grimoire');
     showOverlay(`<div class="eyebrow">jlmol · input builder</div><h2>Spell workbench</h2>
@@ -473,6 +476,17 @@ export function createGame({ scene, camera, canvas, playerChar, npcs, alpaca, re
     showOverlay(`<div class="eyebrow">Grimoire</div><h2>Inputs that converged</h2>${rows.length ? '<div class="lore">' + rows.map(([id, snip]) => `<div class="lr"><div class="t">${ENCOUNTERS[id].name} · ${ENCOUNTERS[id].formula}</div><div class="soft" style="font-size:12px;margin-top:2px">${ENCOUNTERS[id].lesson}</div><pre class="incant">${hl(snip)}</pre></div>`).join('') + '</div>' : '<p class="soft">Nothing yet. Defeat a creature with the right spell and its input is written here.</p>'}${lessons.length ? '<div class="eyebrow" style="margin-top:18px">Lessons from trials</div><div class="lore">' + lessons.map(([id, l]) => `<div class="lr"><div class="t">${sqById(id) ? sqById(id).title : id}</div><div class="soft" style="font-size:12.5px;margin-top:2px">${l}</div></div>`).join('') + '</div>' : ''}
       <div class="actions"><button class="cta" id="back">Back</button></div>`);
     $('back').addEventListener('click', showMenu);
+  }
+  /** Fast travel between the waystones of visited zones (the one you stand at is listed but disabled). */
+  function showTravel(stone) {
+    state = 'menu'; plainPanel();
+    const here = stone.userData.zone;
+    showOverlay(`<div class="eyebrow">Waystone</div><h2>${zoneById(here).name}</h2><p class="soft">The stones answer each other once you have stood beside them. Where to?</p>
+      <div class="qlist">${ZONES.map((z) => { const ok = P.visited.includes(z.id) && z.id !== here; return `<div class="qrow ${ok ? '' : 'locked'}"><span class="st ${z.id === here ? 'on' : ok ? 'done' : 'todo'}">${z.id === here ? '›' : ok ? '✓' : '·'}</span><div><div class="t">${ok ? `<button class="link" data-zone="${z.id}">${z.name}</button>` : z.name}</div><div class="d">${z.id === here ? 'you are here' : ok ? 'travel' : 'not visited yet'}</div></div></div>`; }).join('')}</div>
+      <div class="actions"><button class="cta" id="resume">Stay</button></div>`);
+    el.panel.querySelectorAll('button[data-zone]').forEach((b) => b.addEventListener('click', () => { const w = waystones.find((x) => x.userData.zone === b.dataset.zone); if (!w) return;
+      const zn = zoneById(b.dataset.zone); P.pos.set(w.position.x + 1.4, terrainH(w.position.x + 1.4, w.position.z + 1.0), w.position.z + 1.0); P.c.pos.copy(P.pos); P.moveTarget = null; cam.snapNext = true; cam.dragT = 0; E.burst(P.pos.clone().setY(P.pos.y + 1), 0x9fd8ff, 30, 4); Sfx.pick(); toast(`${zn.name}.`, 'blue'); saveGame(); resume(); }));
+    $('resume').addEventListener('click', resume);
   }
   function showCredits() {
     state = 'menu';
@@ -523,11 +537,13 @@ export function createGame({ scene, camera, canvas, playerChar, npcs, alpaca, re
         const tw = zoneById('tower'), doorD = Math.hypot(P.pos.x - tw.x, P.pos.z - (tw.z - 0.6));
         const canTower = questAvailable(QUESTS[7]) && Q.dragon === 0 && P.items.includes('key');
         const nearBench = workbench && workbench.position.distanceTo(P.pos) < 3 && Q.fitting >= 3;
+        const nearStone = waystones.find((w) => w.position.distanceTo(P.pos) < 2.6);
         if (near && !near.alpaca) { el.prompt.textContent = `E · Talk to ${near.name}`; el.prompt.classList.add('show');
           if (input.act) { const main = MAIN_NPC.has(near.id) ? npcNode(near.id) : null; const mainOpen = main && !main.endsWith('done'); const sq = sqForNpc(near.id);
             if (mainOpen) showDialog(main); else if (sq) showDialog(sqNode(sq)); else showDialog(main ? main : { who: near.id, text: MAIN_NPC.has(near.id) ? 'Not yet. Someone else on the island needs you first. Check the quest log with J.' : 'Nothing for you today. Come back when you have learned more spells.' }); } }
         else if (canTower && doorD < 7) { el.prompt.textContent = 'E · Unlock the Tower of (T)'; el.prompt.classList.add('show'); if (input.act) showDialog('boss0'); }
         else if (nearBench) { el.prompt.textContent = 'E · Craft spells at the jlmol workbench'; el.prompt.classList.add('show'); if (input.act) showForge(); }
+        else if (nearStone) { el.prompt.textContent = 'E · Waystone: travel'; el.prompt.classList.add('show'); if (input.act) showTravel(nearStone); }
         else el.prompt.classList.remove('show');
         input.attack = input.act = input.bolt = false; input.cast = 0;
       }

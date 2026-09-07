@@ -1,7 +1,7 @@
 // Spell visuals: procedural sigils (magic circles) shared by the UI and the world, cast runes, projectiles, impacts.
 import * as THREE from 'three';
 
-export const GLYPH = { hf: 'Φ', dfhf: 'Φ', dfmp2: 'E⁽²⁾', ccsd: 'eᵀ', dcsd: 'eᵀ', ccsdt: '(T)', svd: 'Σσ', udcsd: '↑↓', uccsdt: '↑↓(T)', eom: 'ω', mcscf: 'Ψ', fci: '|Φ⟩', ciphi: 'ε', region: '⊂' };
+export const GLYPH = { hf: 'Φ', dfhf: 'Φ', dfmp2: 'E⁽²⁾', ccsd: 'eᵀ', dcsd: 'eᵀ', ccsdt: '(T)', svd: 'Σσ', udcsd: '↑↓', uccsdt: '↑↓(T)', eom: 'ω', mcscf: 'Ψ', fci: '|Φ⟩', ciphi: 'ε', region: '⊂', twod: '2D' };
 const hex = (c) => '#' + c.toString(16).padStart(6, '0');
 const FONT = '"Cinzel", "Times New Roman", serif';
 

@@ -31,6 +31,10 @@ const VIEWS = {
   impostors: { setup: "__dbg.quality.lodNear = 3; __dbg.quality.lodFar = 4; __dbg.goto('forest', 2, 6); __dbg.freeCam(-36 + 14, 4, -30 + 22, -36, 5, -30)", wait: 2500 },   // every tree beyond 4 m is an impostor
   impostors_mesh: { setup: "__dbg.quality.lodNear = 300; __dbg.quality.lodFar = 400; __dbg.goto('forest', 2, 6); __dbg.freeCam(-36 + 14, 4, -30 + 22, -36, 5, -30)", wait: 2500 },   // the same view with full meshes, for comparison
   atlas: { setup: "__dbg.goto('tower', 0, 9); __dbg.freeCam(0, 40, -60, 0, 40, -120); window.__atlas = __dbg.showAtlas(process_env_ATLAS)".replace('process_env_ATLAS', JSON.stringify(process.env.ATLAS || 'fir_sapling_medium')), wait: 1500, probe: 'window.__atlas' },
+  lagoon: { setup: "__dbg.goto('lagoon', 0, 8); __dbg.cam(0.3, 0.3, 9)", wait: 3000 },
+  marsh:  { setup: "__dbg.goto('marsh', 0, 8); __dbg.cam(-0.3, 0.3, 9)", wait: 3000 },
+  cape:   { setup: "__dbg.goto('cape', 0, 8); __dbg.cam(0.2, 0.28, 10)", wait: 3000 },
+  island: { setup: "__dbg.goto('harbor', 0, 6); __dbg.freeCam(20, 70, 190, -10, 0, -20)", wait: 3000 },   // the whole island from high above the harbour
   treeline: { setup: "__dbg.goto('bazaar', 0, 2); __dbg.freeCam(2, 6, 30, -36, 6, -30)", wait: 3500 },   // the forest from the bazaar, 60-90 m away: LOD meshes and impostors side by side
 };
 const names = process.argv.slice(2).length ? process.argv.slice(2) : ['title', 'harbor'];

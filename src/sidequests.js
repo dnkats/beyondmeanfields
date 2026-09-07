@@ -90,6 +90,12 @@ export const SIDE_QUESTS = [
     hint: 'Craft DF-MCSCF with active="(6,6)" and hit the stretched dinitrogen with it; finish it with whatever you like.',
     reward: { xp: 120, hp: 15 }, done: { text: 'Six in six. Active spaces are chemistry first, arithmetic second.', code: '@dfmcscf begin\n  @set wf active="(6,6)"\nend' },
     lesson: 'wf active="(electrons, orbitals)" defines the MCSCF active space; choose it from the bonds that break.' },
+  { id: 'rhea_twodet', npc: 'rhea', title: 'Two determinants', needs: { quest: 'spins' }, type: 'hunt', grant: ['twod'],
+    intro: { text: 'Methylene again, but a singlet this time, and open-shell: one electron in each of two orbitals, spins opposite. One determinant is not a singlet. Here is the two-determinant spell; name the two open-shell orbitals with occa and occb.', code: '@set wf ms2=0 occa="1-3+4" occb="1-3+5"\n@dfuhf\n@cc 2d-dcsd' },
+    spawn: [{ enc: 'ch2s', zone: 'ridge', dx: -4, dz: 12 }], requireSpell: ['twod'],
+    hint: 'Craft 2D-DCSD (it is in your spellbook now), bind it, and cast that slot on the singlet methylene. UDCSD only scratches it.',
+    reward: { xp: 130, hp: 10 }, done: { text: 'Two determinants, one spin-pure singlet. The fixed-reference variants frs-dcsd and frt-dcsd pin the second determinant\'s weight to +1 or −1 when you already know the answer.' },
+    lesson: '@cc 2d-dcsd treats an open-shell singlet with two determinants; wf occa / occb name the α-only and β-only orbitals. frs-/frt- are the fixed-reference singlet/triplet variants.' },
   // ---------------- Keeper of the Dumps: cores, selected CI restarts
   { id: 'keeper_core', npc: 'keeper', title: 'Correlating the core', needs: { quest: 'dumps' }, type: 'hunt',
     intro: { text: 'A lithium hydride in the cave keeps its strength in the 1s core. Every spell freezes that core by default. Unfreeze it.', code: '@cc dcsd begin\n  @set wf core=:none\nend' },
@@ -164,7 +170,68 @@ export const SIDE_QUESTS = [
       { t: '<code>@set int screen=0</code>', why: 'Prescreening is about integral cost.' }] }],
     reward: { xp: 50 }, done: { text: 'Redundancies removed, orbitals reduced, and every correlated method downstream drops the same functions.' },
     lesson: 'scf redthr discards near-redundant AO combinations (overlap eigenvalues below it); raise it for diffuse or large bases.' },
+  // ---------------- Cartographer Curve (Convergence Cape): the dissociation curve and the basis ladder
+  { id: 'curve_scan', npc: 'curve', title: 'The dissociation curve', needs: { quest: 'spins' }, type: 'hunt',
+    intro: { text: 'I am mapping the N₂ potential curve, and four points of it have come alive on the cape: 1.1, 1.5, 2.0 and 2.5 Å. The right spell changes along the way. Put them all down and tell me where each method broke.', code: 'geometry = "angstrom\n  N 0 0 0\n  N 0 0 $R"   # R = 1.1, 1.5, 2.0, 2.5' },
+    spawn: [{ enc: 'n2eq', zone: 'cape', dx: -9, dz: -3 }, { enc: 'n2mid', zone: 'cape', dx: -3, dz: -9 }, { enc: 'n2far', zone: 'cape', dx: 5, dz: -8 }, { enc: 'n2brk', zone: 'cape', dx: 10, dz: -2 }],
+    hint: 'Four dinitrogens along the cape, from bound to broken. CCSD(T) is the benchmark at 1.1 Å and a recoil at 2.0; DCSD holds to 2.0; only MCSCF or CIPHI finish the 2.5 Å one.',
+    reward: { xp: 160, hp: 10 }, done: { text: 'Bound: (T) is gold. Strained: DCSD, or (T) with care. Sundered: DCSD wounds, nothing single-reference finishes. Broken: active space first. That curve is the whole story of this island.' },
+    lesson: 'Along a bond-breaking curve the single-reference methods fail in order: MP2, then CCSD(T), then CCSD; DCSD lasts longest; past the crossover only MCSCF or selected CI converge.' },
+  { id: 'curve_basis', npc: 'curve', title: 'The basis ladder', needs: { quest: 'fitting' }, type: 'hunt',
+    intro: { text: 'A water on the headland refuses to converge: its correlation energy in cc-pVDZ is a fifth short of the limit, so every spell passes through it. Craft one in a bigger basis.', code: 'basis = "vtz"      # cc-pVTZ\nbasis = "avqz"     # aug-cc-pVQZ' },
+    spawn: [{ enc: 'basiswater', zone: 'cape', dx: 6, dz: 6 }], requireBasis: /(^|[;,\s"=])(aug-cc-p|a)?v[tq5]z|cc-pV[TQ5]Z/i,
+    hint: 'Set the basis field of the spell to vtz or larger, bind it, and cast that slot on the water.',
+    reward: { xp: 80, mana: 10 }, done: { text: 'Triple zeta. The correlation energy converges as X⁻³ in the cardinal number: 80 % in vdz, 90 % in vtz, 95 % in vqz. Extrapolate the last two and you have the limit.' },
+    lesson: 'Basis abbreviations: vdz, vtz, vqz, v5z for cc-pVXZ; avdz … for aug-cc-pVXZ. Correlation energies converge as X⁻³; extrapolate from two cardinal numbers.' },
+  // ---------------- Ibo the Boatwright (Localization Lagoon): localised orbitals
+  { id: 'ibo_localize', npc: 'ibo', title: 'Where the electrons live', needs: { quest: 'ladder' }, type: 'hunt',
+    spawn: [{ enc: 'c2h4', zone: 'lagoon', dx: 9, dz: 7 }], hint: 'An ethylene drifts at the pond; any correlated spell converges on it. Then we talk orbitals.',
+    intro: { text: 'Canonical orbitals are spread over the whole molecule. For a picture of the bonds, or as the start of a local treatment, you want them localised.' },
+    steps: [
+      { q: 'Localise the occupied orbitals of the current reference:', choices: [
+        { t: '<code>@localize</code>, intrinsic bond orbitals by default; <code>@set loc method="pm"</code> or <code>"boys"</code> for the other schemes', ok: true, why: 'IBOs are the default; Pipek–Mezey and Boys are the alternatives. The virtuals are localised too (OPAO) unless loc virtual=false.' },
+        { t: '<code>@set wf localize=true</code>', why: 'No such wf option. Localisation is its own step: the @localize macro.' },
+        { t: '<code>@dfhf begin @set scf localize=true end</code>', why: 'The SCF has no localisation option; the orbitals are localised afterwards with @localize.' }] },
+      { q: 'You created MO integrals with @dfints before localising. What now?', choices: [
+        { t: 'Call <code>@dfints</code> again: they belong to the old orbitals', ok: true, why: 'Explicitly created integrals are yours and stale after every orbital change. Integrals a method generates for itself are per-run and safe.' },
+        { t: 'Nothing, integrals are orbital-independent', why: 'AO integrals are; MO integrals change with every rotation of the orbitals.' },
+        { t: '<code>@set wf dump=""</code>', why: 'That picks which orbitals a restart uses, not which integrals are current.' }] }],
+    reward: { xp: 70 }, done: { text: 'Localised orbitals sit on bonds and atoms; that is what makes regions and local correlation possible.' },
+    lesson: '@localize localises the orbitals (IBO default, loc method="pm" or "boys"); MO integrals created with @dfints must be regenerated afterwards.' },
+  // ---------------- Marsh Warden Tsi (Transcorrelated Marsh): non-Hermitian Hamiltonians
+  { id: 'tsi_tc', npc: 'tsi', title: 'The transcorrelated dump', needs: { quest: 'dumps' }, type: 'hunt',
+    intro: { text: 'Out in the marsh sits a dinitrogen made of transcorrelated integrals: the Hamiltonian was similarity transformed with a Jastrow factor, and it is no longer Hermitian. Not every spell survives that.' },
+    steps: [
+      { q: 'How does ElemCo know a FCIDUMP is similarity transformed?', choices: [
+        { t: 'The header carries <code>ST=1</code>', ok: true, why: 'The dump format has IUHF, ST, III and ICMPLX as optional header keys; ST=1 marks the non-Hermitian case.' },
+        { t: '<code>@set int tc=true</code>', why: 'There is no such option; the file itself says so.' },
+        { t: 'A separate <code>tcfcidump = "…"</code> variable', why: 'It is an ordinary fcidump = "…" line.' }] },
+      { q: 'Which of these run on it?', choices: [
+        { t: '<code>@cc dcsd</code>, <code>@fci</code> and <code>@ciphi</code>: they work with non-Hermitian integrals', ok: true, why: 'The amplitude equations do not need Hermiticity; FCI and CIPHI solve for left and right vectors.' },
+        { t: '<code>@cc ccsd(t)</code> as usual', why: 'Perturbative triples on an ST=1 dump stop with an error unless you use the Λ variant, @cc λccsd(t), or set cc ignore_error=true.' },
+        { t: '<code>@dfmp2</code>', why: 'A dump has no AO basis, so there is nothing to density-fit.' }] }],
+    spawn: [{ enc: 'tcdump', zone: 'marsh', dx: 8, dz: -8 }], requireSpell: ['dcsd', 'ccsd', 'udcsd', 'ciphi', 'fci'],
+    hint: 'Finish the transcorrelated dinitrogen with DCSD, CCSD or CIPHI; (T) and MP2 will not run on it.',
+    reward: { xp: 120, hp: 10 }, done: { text: 'Transcorrelation puts the cusp into the Hamiltonian, so a small basis already gives near-limit energies. The price: no Hermiticity, and (T) only in its Λ form.' },
+    lesson: 'Transcorrelated FCIDUMPs have ST=1 in the header. @cc dcsd, @fci and @ciphi handle the non-Hermitian integrals; (T) needs @cc λccsd(t).' },
+  { id: 'tsi_bohf', npc: 'tsi', title: 'Bi-orthogonal orbitals', needs: { quest: 'dumps' }, type: 'quiz',
+    intro: { text: 'The orbitals stored in a transcorrelated dump were optimised for the untransformed Hamiltonian. For the transformed one you can do better.' },
+    steps: [{ q: 'Re-optimise the reference for the non-Hermitian Hamiltonian and correlate on it:', choices: [
+      { t: '<code>@cc dcsd</code>, then <code>@bohf</code>, <code>@transform_ints</code>, <code>@cc dcsd</code> again', ok: true, why: 'Bi-orthogonal HF optimises left and right orbitals; @transform_ints rewrites the dump integrals in them; then the correlated run.' },
+      { t: '<code>@bohf</code> alone', why: 'The orbitals are optimised but the integrals are still in the old basis: @transform_ints first, then correlate.' },
+      { t: '<code>@dfhf</code>', why: 'Density-fitted HF needs an AO basis; a dump has none. @bohf is the mean field for dumps.' }] }],
+    reward: { xp: 60 }, done: { text: 'Left and right. Everything on this side of the marsh comes in pairs.', code: '@cc dcsd\n@bohf\n@transform_ints\n@cc dcsd' },
+    lesson: '@bohf (and @bouhf) optimise bi-orthogonal orbitals for a non-Hermitian dump; @transform_ints rewrites the integrals in them.' },
   // ---------------- The Alpaca: SVD settings
+  { id: 'alpaca_svddcsd', npc: 'alpaca', title: 'Low-rank doubles', needs: { quest: 'golems' }, type: 'hunt',
+    intro: { text: 'Triples are not the only amplitudes that are low rank. The doubles of a big molecule are too, and there is a spell for that.' },
+    steps: [{ q: 'SVD-decomposed doubles, which macro?', choices: [
+      { t: '<code>@dfcc svd-dcsd</code>', ok: true, why: '@dfcc is the density-fitted coupled-cluster driver; svd-dcsd is its default method.' },
+      { t: '<code>@cc svd-dcsd</code>', why: 'Under @cc only the triples are SVD-decomposed (svd-dc-ccsdt). The doubles variant lives in @dfcc.' },
+      { t: '<code>@svdcc dcsd</code>', why: 'No such macro.' }] }],
+    spawn: [{ enc: 'anthr', zone: 'tower', dx: -14, dz: -6 }], requireSpell: ['svd', 'dcsd'], hint: 'An anthracene stands below the tower; finish it with a distinguishable-cluster spell, plain or SVD.',
+    reward: { xp: 90, mana: 10 }, done: { text: 'Low rank all the way down. cc ampsvdtol is the dial for both.', code: '@dfhf\n@dfcc svd-dcsd begin\n  @set cc ampsvdtol=1e-5\nend' },
+    lesson: '@dfcc svd-dcsd: DCSD with SVD-decomposed doubles for large molecules; cc ampsvdtol sets the decomposition threshold.' },
   { id: 'alpaca_usedf', npc: 'alpaca', title: 'No fitting basis, no problem', needs: { quest: 'golems' }, type: 'hunt',
     intro: { text: 'A golem below the tower is made of an element without an mpfit basis, so density fitting has nothing to fit with. SVD-DC-CCSDT can Cholesky-decompose the exact integrals instead. Craft it, bind it, cast it.', code: '@cc svd-dc-ccsdt begin\n  @set cc usedf=false\nend' },
     spawn: [{ enc: 'fitless', zone: 'tower', dx: -13, dz: 14 }], requireSpell: ['svd'], requireExtras: [{ group: 'cc', key: 'usedf', eq: 'false' }],
@@ -174,4 +241,5 @@ export const SIDE_QUESTS = [
 ];
 export const SIDE_NPCS = {
   pim:  { name: 'Postdoc Pim', color: '#2f8f9b' }, levi: { name: 'Brother Levelshift', color: '#6b4a9b' }, ada: { name: 'Archivist Ada', color: '#b5751a' }, scan: { name: 'Captain Scan', color: '#3c5aa8' },
+  curve: { name: 'Cartographer Curve', color: '#4a7fb5' }, ibo: { name: 'Ibo the Boatwright', color: '#5f8f4a' }, tsi: { name: 'Marsh Warden Tsi', color: '#7a8a3c' },
 };

@@ -30,16 +30,20 @@ export const SPELLS = {
             desc: 'Selected CI with perturbative selection and a PT2 correction. ciphi epsilon is the dial: smaller is more exact and more expensive.' },
   region: { name: 'Region', macro: '@region', tier: 3, cost: 10, power: 0, scaling: 'fragment', color: 0xe9c56b, maxSize: 5, modifier: true, opts: ['centers'],
             desc: 'Cut a fragment out of a big molecule; the environment is frozen as core. The next spell only has to correlate the fragment.' },
+  twod:   { name: '2D-DCSD', macro: '@cc 2d-dcsd', tier: 3, cost: 36, power: 2.4, scaling: 'N⁶', color: 0xd86fb0, maxSize: 3, ref: 'dfuhf', twodet: true, robust: 2, opts: ['occa', 'occb'],
+            desc: 'Two-determinant DCSD for open-shell singlets: one α-only and one β-only orbital, named with wf occa and occb. The biradical spell.' },
 };
-export const OPT_DEFAULTS = { ms2: 2, nstates: 1, active: '(6,6)', epsilon: '1e-4', centers: '[1, 2]' };
+export const OPT_DEFAULTS = { ms2: 2, nstates: 1, active: '(6,6)', epsilon: '1e-4', centers: '[1, 2]', occa: '1-3+4', occb: '1-3+5' };
 
 /** The ElemCo options a spell may carry as "additional settings" (group, key: [description, example]). Names follow src/infos/options.jl. */
 export const OPTION_CATALOG = {
   scf:  { maxit: ['maximum SCF iterations', '200'], thr: ['SCF convergence threshold', '1e-8'], guess: ['orbital guess: :SAD (atomic densities), :HCORE, or :ORB from the dump', ':HCORE'], redthr: ['discard AO combinations whose overlap eigenvalue is below this (linear dependencies)', '1e-6'] },
   diis: { maxdiis: ['number of DIIS vectors kept', '10'], crop: ['CROP-DIIS variant, usually with maxcrop=3', 'true'], maxcrop: ['DIIS dimension for CROP-DIIS', '3'], resthr: ['residual threshold below which DIIS starts', '1.0'] },
   cc:   { maxit: ['maximum CC iterations', '100'], thr: ['residual convergence threshold', '1e-8'], shifts: ['level shift for singles', '0.3'], shiftp: ['level shift for doubles', '0.5'], conven: ['energy convergence factor: energy threshold = sqrt(thr) × conven', '0.01'],
-          properties: ['compute properties such as the dipole moment', 'true'], usedf: ['density fitting inside SVD-DC-CCSDT; false switches to Cholesky', 'false'], ampsvdtol: ['amplitude decomposition threshold for SVD methods', '1e-6'], nomp2: ['skip the MP2 starting guess (1)', '1'] },
+          properties: ['compute properties such as the dipole moment', 'true'], usedf: ['density fitting inside SVD-DC-CCSDT; false switches to Cholesky', 'false'], ampsvdtol: ['amplitude decomposition threshold for SVD methods', '1e-6'], nomp2: ['skip the MP2 starting guess (1)', '1'],
+          ignore_error: ['run perturbative triples on a similarity-transformed (ST=1) Hamiltonian anyway', 'true'] },
   wf:   { charge: ['charge relative to the neutral molecule or the dump', '1'], ms2: ['twice the spin projection', '2'], core: ['frozen core: :auto, :none, :small, :large', ':none'], freeze_nocc: ['number of occupied orbitals to freeze', '1'],
+          occa: ['occupied α orbitals for an open-shell reference, e.g. "1-3+4"', '"1-3+4"'], occb: ['occupied β orbitals, e.g. "1-3+5"', '"1-3+5"'],
           store: ['file to store orbitals and converged amplitudes', '"cc.h5"'], start: ['file to restart amplitudes from', '"cc.h5"'], dump: ['orbital dump; "" reuses the orbitals of the start file', '""'], active: ['active space "(electrons, orbitals)"', '"(6,6)"'] },
   eom:  { nstates: ['number of excited states', '3'], shift: ['level shift for the Davidson solver', '0.1'] },
   ciphi:{ epsilon: ['selection threshold, smaller is tighter', '1e-5'], pt2_only: ['only the PT2 correction on a stored determinant space', 'true'], target_selection: ['maximum number of determinants', '500000'] },
@@ -51,7 +55,7 @@ export const OPTION_CATALOG = {
   region: { mode: ['centre selection: :inclusive or :exclusive', ':exclusive'], occ_charge_thr: ['charge threshold to keep an occupied orbital in the fragment', '0.25'], pi: ['π-space selection: :none, :occupied, :both', ':occupied'] },
 };
 const REF_GROUPS = new Set(['scf', 'diis', 'int', 'cholesky', 'mem', 'print']);
-const GLOBAL_WF = new Set(['charge', 'ms2', 'core', 'freeze_nocc']);
+const GLOBAL_WF = new Set(['charge', 'ms2', 'core', 'freeze_nocc', 'occa', 'occb']);
 /** Parses "group key=value key=value; group key=value" into sets, validating against the catalogue. */
 export function parseExtras(text) {
   const sets = [], errors = [];
@@ -85,6 +89,7 @@ export function craftInput(spellId, opts, enc) {
   const globalWf = [];
   if (enc && enc.charge && !sets.some((x) => x.group === 'wf' && x.key === 'charge')) globalWf.push(`charge=${enc.charge}`);
   if (open) globalWf.push(`ms2=${opts.ms2 ?? (enc && enc.ms2) ?? 2}`);
+  if (s.twodet) globalWf.push('ms2=0', `occa="${(opts.occa ?? OPT_DEFAULTS.occa).replace(/"/g, '')}"`, `occb="${(opts.occb ?? OPT_DEFAULTS.occb).replace(/"/g, '')}"`);   // the two open-shell orbitals of the singlet
   for (const x of sets) if (x.group === 'wf' && GLOBAL_WF.has(x.key) && !(x.key === 'ms2' && open)) globalWf.push(`${x.key}=${x.value}`);
   if (globalWf.length) lines.push(`@set wf ${globalWf.join(' ')}`);
   const block = (macro, groupSets) => { const byGroup = {}; for (const x of groupSets) (byGroup[x.group] = byGroup[x.group] || []).push(`${x.key}=${x.value}`);
@@ -93,7 +98,7 @@ export function craftInput(spellId, opts, enc) {
   const methodSets = sets.filter((x) => !REF_GROUPS.has(x.group) && !(x.group === 'wf' && GLOBAL_WF.has(x.key)));
   if (spellId === 'hf') { lines.push(block('@hf', refSets)); return lines.join('\n'); }
   if (spellId === 'dfhf') { lines.push(block('@dfhf', refSets)); return lines.join('\n'); }
-  lines.push(block(open ? '@dfuhf' : '@dfhf', refSets));
+  lines.push(block(open || s.twodet ? '@dfuhf' : '@dfhf', refSets));
   if (spellId === 'mcscf') { lines.push(block('@dfmcscf', [{ group: 'wf', key: 'active', value: `"${(opts.active ?? OPT_DEFAULTS.active).replace(/"/g, '')}"` }, ...methodSets.filter((x) => !(x.group === 'wf' && x.key === 'active'))])); return lines.join('\n'); }
   if (spellId === 'region') { lines.push(block(`@region ${opts.centers ?? OPT_DEFAULTS.centers}`, methodSets.filter((x) => x.group === 'region')), '@cc dcsd   # correlates only the region; the environment is frozen'); return lines.join('\n'); }
   if (spellId === 'eom') lines.push(block('@cc eom-dcsd', [{ group: 'eom', key: 'nstates', value: String(opts.nstates ?? 1) }, ...methodSets.filter((x) => !(x.group === 'eom' && x.key === 'nstates'))]));
@@ -217,6 +222,26 @@ export const ENCOUNTERS = {
   hydroxide:{ name: 'Hydroxide Anion', formula: 'OH⁻', nelec: 10, size: 2, hp: 130, atoms: [['O', 0, 0, 0], ['H', 0, 0, 0.964]], kind: 'dynamic', xp: 90, charge: -1,
               needsBasis: { re: /(^|[;,\s"])(O\s*=\s*)?a(ug-cc-p)?v[dtq]z/i, why: 'The extra electron is diffuse and the compact vdz basis cannot hold it: the spell misses. Put augmented functions on the oxygen, basis "vdz; O=avdz".' },
               tells: ['an anion: one electron more than water', 'its outermost electron is far from the nuclei'], lesson: 'Anions need diffuse (augmented) functions, and only where the charge sits: basis = "vdz; O=avdz".' },
+  // ---- the dissociation curve (Convergence Cape) and the basis ladder
+  n2mid:    { name: 'Strained Dinitrogen', formula: 'N₂ · 1.5 Å', nelec: 14, size: 2, hp: 170, atoms: [['N', 0, 0, -0.75], ['N', 0, 0, 0.75]], kind: 'dynamic', static: 1, xp: 100,
+              tells: ['a triple bond stretched by a third', 'the single reference begins to strain'], lesson: 'At 1.5 Å N₂ is still single-reference, barely: MP2 fails, CCSD and CCSD(T) only hold on, DCSD is the safe hit.' },
+  n2far:    { name: 'Sundered Dinitrogen', formula: 'N₂ · 2.0 Å', nelec: 14, size: 2, hp: 190, atoms: [['N', 0, 0, -1.0], ['N', 0, 0, 1.0]], kind: 'static', static: 2, xp: 120,
+              tells: ['a triple bond nearly broken', 'two configurations of comparable weight'], lesson: 'At 2.0 Å the (T) correction explodes and CCSD drifts; DCSD still wounds it, MCSCF or selected CI finish it.' },
+  n2brk:    { name: 'Broken Dinitrogen', formula: 'N₂ · 2.5 Å', nelec: 14, size: 2, hp: 210, atoms: [['N', 0, 0, -1.25], ['N', 0, 0, 1.25]], kind: 'static', static: 3, xp: 150,
+              tells: ['two nitrogen atoms, six electrons undecided', 'no single reference survives'], lesson: 'Past 2.5 Å only multireference methods converge: an active space (6,6) with MCSCF, then selected CI for the rest.' },
+  basiswater:{ name: 'Unconverged Water', formula: 'H₂O · cc-pVDZ is not enough', nelec: 10, size: 2, hp: 150, atoms: WATER_ATOMS, kind: 'dynamic', xp: 100,
+              needsBasis: { re: /(^|[;,\s"=])(aug-cc-p|a)?v[tq5]z|cc-pV[TQ5]Z/i, why: 'In cc-pVDZ the correlation energy is a fifth short of the basis-set limit: the spell only scratches. Use a triple-zeta basis, basis = "vtz", or larger.' },
+              tells: ['ordinary water', 'its correlation energy converges slowly with the basis'], lesson: 'Correlation energies converge slowly with the basis: cc-pVDZ recovers roughly 80 % of the limit, cc-pVTZ 90 %, cc-pVQZ 95 %. Extrapolate as X⁻³.' },
+  // ---- the transcorrelated marsh
+  tcdump:   { name: 'Transcorrelated Dump', formula: 'N₂ · xTC FCIDUMP', nelec: 14, size: 2, hp: 200, atoms: [['N', 0, 0, -0.549], ['N', 0, 0, 0.549]], kind: 'dynamic', hard: true, xp: 140,
+              geometryLine: 'fcidump = "N2_TC.FCIDUMP"   # header ST=1: similarity transformed, non-Hermitian',
+              blockSpells: { ccsdt: 'ERROR: perturbative triples on a similarity-transformed (ST=1) Hamiltonian. Use the Λ variant, @cc λccsd(t), or set cc ignore_error=true if you know what you are doing.',
+                uccsdt: 'ERROR: perturbative triples on a similarity-transformed (ST=1) Hamiltonian. Use the Λ variant or cc ignore_error=true.',
+                dfmp2: 'ERROR: a FCIDUMP has no AO basis, so there is nothing to density-fit. DF-MP2 cannot run on a dump.' },
+              tells: ['integrals only, similarity transformed', 'non-Hermitian: left and right vectors differ'], lesson: 'A transcorrelated FCIDUMP carries ST=1 in its header. DCSD, FCI and CIPHI work with non-Hermitian integrals; (T) needs the Λ variant.' },
+  // ---- the open-shell singlet
+  ch2s:     { name: 'Singlet Methylene', formula: 'CH₂ · ¹B₁', nelec: 8, size: 2, hp: 160, atoms: [['C', 0, 0, 0.1], ['H', 0, 1.06, -0.3], ['H', 0, -1.06, -0.3]], kind: 'static', static: 2, twodet: true, xp: 130,
+              tells: ['eight electrons, two of them unpaired with opposite spin', 'an open-shell singlet: two determinants of equal weight'], lesson: 'An open-shell singlet needs two determinants: 2D-DCSD with wf occa and occb naming the two open-shell orbitals. A single UHF determinant is spin-contaminated.' },
   dragon:   { name: 'Dragon of Static Correlation', formula: 'N₂ · 3.0 Å', nelec: 14, size: 2, hp: 520, atoms: [['N', 0, 0, -1.5], ['N', 0, 0, 1.5]], kind: 'static', static: 3, xp: 400, boss: true,
               tells: ['a triple bond fully broken', 'six electrons in six near-degenerate orbitals'], lesson: 'Severe static correlation. MCSCF with a (6,6) active space exposes it; CIPHI finishes it. Single-reference spells only feed it.' },
 };
@@ -232,6 +257,9 @@ export const WILD = [
   { zone: 'caves', gate: 'dumps', respawn: 90, pool: [{ enc: 'beh2', dx: -12, dz: 10 }, { enc: 'lih', dx: 12, dz: -3 }, { enc: 'c2', dx: 0, dz: -12 }] },
   { zone: 'ridge', gate: 'spins', respawn: 100, pool: [{ enc: 'oh', dx: -12, dz: -6 }, { enc: 'no', dx: 12, dz: -8 }, { enc: 'ch2', dx: -10, dz: 10 }, { enc: 'cn', dx: 10, dz: 10 }, { enc: 'h2co', dx: 0, dz: 13 }] },
   { zone: 'tower', gate: 'golems', respawn: 120, pool: [{ enc: 'anthr', dx: -14, dz: 14 }, { enc: 'glycine', dx: 14, dz: 14 }, { enc: 'o3', dx: 0, dz: 18 }] },
+  { zone: 'lagoon', gate: 'ladder', respawn: 90, pool: [{ enc: 'waterdimer', dx: -11, dz: 8 }, { enc: 'nh3', dx: 10, dz: -9 }] },
+  { zone: 'marsh', gate: 'dumps', respawn: 100, pool: [{ enc: 'cn', dx: -12, dz: 6 }, { enc: 'no', dx: 11, dz: 8 }, { enc: 'tcdump', dx: 0, dz: -13 }] },
+  { zone: 'cape', gate: 'fitting', respawn: 90, pool: [{ enc: 'f2', dx: -10, dz: -6 }, { enc: 'co', dx: 10, dz: -4 }] },
 ];
 
 // ------------------------------------------------------------ the rules
@@ -252,6 +280,15 @@ export function judge(spellId, opts, enc, state = {}) {
   if (enc.open && !s.open && !['hf', 'mcscf', 'fci', 'ciphi'].includes(spellId)) return { result: 'fail', factor: 0, reason: `ERROR: a closed-shell reference cannot hold ${enc.ms2} unpaired electrons. Set wf ms2=${enc.ms2}, use @dfuhf and a U method.` };
   if (s.open && !enc.open) return { result: 'weak', factor: 0.6, reason: 'An unrestricted method on a closed shell works, but you paid for spin contamination you did not need.' };
   if (s.open && enc.open && (opts.ms2 ?? 0) !== enc.ms2) return { result: 'fail', factor: 0, reason: `wf ms2=${opts.ms2 ?? 0} is the wrong spin: this is a ${enc.ms2 === 2 ? 'triplet' : 'doublet'}, ms2 is twice the spin projection, so ms2=${enc.ms2}.` };
+  if (s.twodet && enc.open) return { result: 'fail', factor: 0, reason: '2D-DCSD is for open-shell singlets (ms2=0). This is a high-spin state: one determinant, UDCSD.' };
+  if (s.twodet && !enc.twodet) return { result: 'weak', factor: 0.5, reason: 'Two determinants where one suffices: it converges, but you paid for the second.' };
+  if (enc.twodet) {
+    if (s.twodet) return { result: 'best', factor: 1.3, reason: `2D-DCSD with occa="${opts.occa ?? OPT_DEFAULTS.occa}" occb="${opts.occb ?? OPT_DEFAULTS.occb}": both determinants of the open-shell singlet, spin-pure.` };
+    if (spellId === 'mcscf') return { result: 'ok', factor: 0.8, reason: 'The active space holds both determinants; the dynamic correlation is still missing.' };
+    if (spellId === 'fci' || spellId === 'ciphi') return { result: 'best', factor: 1.2, reason: 'Every determinant at once: the open-shell singlet is nothing special here.' };
+    if (s.open) return { result: 'weak', factor: 0.4, reason: 'A single UHF determinant with ms2=0 is a spin-contaminated mix of singlet and triplet. It scratches. 2D-DCSD treats both determinants.' };
+    if (spellId !== 'hf' && spellId !== 'dfhf') return { result: 'fail', factor: 0, reason: 'WARNING: CC iterations did not converge! A closed-shell reference cannot hold an open-shell singlet. Two determinants: @cc 2d-dcsd with wf occa and occb.' };
+  }
   if (size > s.maxSize) {
     if (spellId === 'fci') return { result: 'fail', factor: 0, reason: 'ERROR: FCI space too large: the determinant list does not fit in memory. Use CIPHI, or a much smaller molecule.' };
     return { result: 'fail', factor: 0, reason: `${s.name} scales as ${s.scaling}: ${enc.nelec} electrons would run for weeks. Cut out a @region first, or use a cheaper method.` };
