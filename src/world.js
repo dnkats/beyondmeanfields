@@ -371,7 +371,7 @@ export async function conifierParts(kind = 'pine_tree_01', { height = 14, tiers 
   const foliage = mergeGeometries(cards, false); foliage.computeVertexNormals();
   return [{ geometry: trunk, material: trunkMat }, { geometry: foliage, material: twigMat }];
 }
-export function placements(count, { minH = 1.2, maxH = 8.5, maxSlope = 0.6, avoidZones = true, zoneMargin = 0.95, near = null, minDist = 0, scale = [0.9, 1.3], seedOffset = 0, exclude = [] } = {}) {
+export function placements(count, { minH = 1.2, maxH = 8.5, maxSlope = 0.6, avoidZones = true, zoneMargin = 0.95, near = null, minDist = 0, scale = [0.9, 1.3], seedOffset = 0, exclude = [], sink = 0 } = {}) {
   const out = []; let tries = 0;
   while (out.length < count && tries < count * 40) {
     tries++;
@@ -382,7 +382,8 @@ export function placements(count, { minH = 1.2, maxH = 8.5, maxSlope = 0.6, avoi
     if (avoidZones && ZONES.some((zn) => Math.hypot(x - zn.x, z - zn.z) < zn.r * zoneMargin)) continue;
     if (exclude.some((e) => Math.hypot(x - e.x, z - e.z) < e.r)) continue;
     if (minDist && out.some((o) => Math.hypot(o.x - x, o.z - z) < minDist)) continue;
-    out.push({ x, y: h - 0.05, z, rot: srand() * 6.283, s: scale[0] + srand() * (scale[1] - scale[0]) });
+    const s = scale[0] + srand() * (scale[1] - scale[0]);
+    out.push({ x, y: h - 0.05 - sink * slopeAt(x, z) * s, z, rot: srand() * 6.283, s });   // `sink` buries rocks into slopes so their downhill side does not hover
   }
   return out;
 }

@@ -65,12 +65,12 @@ async function build() {
   jobs.push(scatterModel(scene, 'shrub_03', placements(Math.round(90 * T), { scale: [0.8, 1.4], zoneMargin: 0.6 }), { foliage: true, shadows: false }));
   jobs.push(scatterModel(scene, 'fern_02', placements(Math.round(110 * T), { near: { x: forest.x, z: forest.z, r0: 2, r1: 20 }, avoidZones: false, scale: [0.9, 1.5] }), { foliage: true, shadows: false }));
   jobs.push(scatterModel(scene, 'flower_gazania', placements(Math.round(70 * T), { near: { x: -20, z: 20, r0: 0, r1: 45 }, avoidZones: false, scale: [0.9, 1.4] }), { foliage: true, shadows: false }));
-  jobs.push(scatterModel(scene, 'namaqualand_boulder_02', placements(30, { scale: [0.7, 1.5], maxSlope: 1.2, minH: 0.8, zoneMargin: 1.1, seedOffset: 7 }), { shadows: true, field: true }));   // boulder_01's scan cannot be simplified below 54k (seams), this one is 3.5k
-  jobs.push(scatterModel(scene, 'rock_moss_set_01', placements(30, { scale: [0.8, 1.6], maxSlope: 1.2 }), { shadows: true, field: true }));
+  jobs.push(scatterModel(scene, 'namaqualand_boulder_02', placements(30, { scale: [0.7, 1.5], maxSlope: 1.2, minH: 0.8, zoneMargin: 1.1, seedOffset: 7, sink: 0.5 }), { shadows: true, field: true }));   // boulder_01's scan cannot be simplified below 54k (seams), this one is 3.5k
+  jobs.push(scatterModel(scene, 'rock_moss_set_01', placements(30, { scale: [0.8, 1.6], maxSlope: 1.2, sink: 0.5 }), { shadows: true, field: true }));
   jobs.push(scatterModel(scene, 'stone_01', placements(70, { scale: [0.6, 1.8], maxSlope: 1.5, minH: 0.6 }), { shadows: true }));
   jobs.push(scatterModel(scene, 'coast_rocks_02', placements(22, { minH: 0.2, maxH: 1.2, maxSlope: 2, scale: [0.5, 1.0], zoneMargin: 1.4 }), { shadows: true, field: true }));
-  jobs.push(scatterModel(scene, 'namaqualand_boulder_02', placements(18, { near: { x: 36, z: -36, r0: 4, r1: 22 }, avoidZones: false, maxSlope: 1.5, scale: [0.6, 1.3] }), { shadows: true, field: true }));
-  jobs.push(scatterModel(scene, 'rock_face_01', placements(10, { near: { x: 0, z: -60, r0: 12, r1: 24 }, avoidZones: false, maxSlope: 3, minH: 3, scale: [0.6, 1.2] }), { shadows: true, field: true }));
+  jobs.push(scatterModel(scene, 'namaqualand_boulder_02', placements(18, { near: { x: 36, z: -36, r0: 4, r1: 22 }, avoidZones: false, maxSlope: 1.5, scale: [0.6, 1.3], sink: 0.5 }), { shadows: true, field: true }));
+  jobs.push(scatterModel(scene, 'rock_face_01', placements(10, { near: { x: 0, z: -60, r0: 12, r1: 24 }, avoidZones: false, maxSlope: 3, minH: 3, scale: [0.6, 1.2], sink: 0.6 }), { shadows: true, field: true }));
   jobs.push(scatterModel(scene, 'dead_tree_trunk', placements(8, { near: { x: forest.x, z: forest.z, r0: 3, r1: 14 }, avoidZones: false, scale: [0.8, 1.2] })));
   jobs.push(scatterModel(scene, 'tree_stump_01', placements(14, { near: { x: forest.x, z: forest.z, r0: 3, r1: 16 }, avoidZones: false, scale: [0.8, 1.3] })));
   const grassPl = placements(quality.grass, { scale: [1.3, 2.1], zoneMargin: 0.35, maxSlope: 0.7, minH: 1.0 });   // knee-high tufts, not reeds
@@ -117,7 +117,7 @@ async function build() {
     { id: 'cluster', model: 'girl', female: true, fallback: 'xbot', zone: 'forest', dx: -1, dz: 0 },
     { id: 'keeper', model: 'soldier', tint: 0x6f7690, zone: 'caves', dx: -4, dz: 3 },
     { id: 'rhea', model: 'michelle', female: true, tint: 0xe08080, zone: 'ridge', dx: 0, dz: 1 },
-    { id: 'pim', model: 'rpm', tint: 0x8fd6dc, zone: 'harbor', dx: 6, dz: 15 },   // at the end of the pier deck
+    { id: 'pim', model: 'rpm', tint: 0x8fd6dc, zone: 'harbor', dx: 6, dz: 15, deck: true },   // at the end of the pier deck
     { id: 'scan', model: 'robot', fallback: 'xbot', zone: 'harbor', dx: 9, dz: 5 },   // a scanner robot on the beach by the pier ramp
     { id: 'levi', model: 'soldier', tint: 0xb59ae0, zone: 'forest', dx: 8, dz: 3 },
     { id: 'ada', model: 'michelle', female: true, tint: 0xe6c08a, zone: 'caves', dx: 5, dz: 7 },
@@ -126,7 +126,7 @@ async function build() {
   for (const n of NPCS) {
     let c = null;
     try { c = await createCharacter(n.model, lib, { female: n.female, tint: n.tint }); } catch (e) { console.warn('npc model failed', n.model, e.message); c = await createCharacter(n.fallback || 'xbot', lib, { female: n.female }); }
-    const zn = zoneById(n.zone); c.pos.set(zn.x + n.dx, surfaceH(zn.x + n.dx, zn.z + n.dz), zn.z + n.dz); c.heading = Math.random() * 6; scene.add(c.root); npcs[n.id] = c; addCircle(c.pos.x, c.pos.z, 0.5);
+    const zn = zoneById(n.zone); c.pos.set(zn.x + n.dx, (n.deck ? surfaceH : terrainH)(zn.x + n.dx, zn.z + n.dz), zn.z + n.dz);   // only deck-dwellers stand on rock fields (the Keeper once ended up on the cliff) c.heading = Math.random() * 6; scene.add(c.root); npcs[n.id] = c; addCircle(c.pos.x, c.pos.z, 0.5);
   }
   // the Alpaca (cameo, procedural)
   const alpaca = new THREE.Group();
