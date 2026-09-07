@@ -4,7 +4,7 @@ import { chromium } from 'playwright';
 const script = process.argv[2] || 'return 1';
 const server = await createServer({ root: new URL('..', import.meta.url).pathname, server: { port: +(process.env.PORT || 5199), strictPort: true }, logLevel: 'error' });
 await server.listen();
-const browser = await chromium.launch({ args: ['--use-gl=angle', '--use-angle=gl', '--ignore-gpu-blocklist'] });
+const browser = await chromium.launch({ args: process.env.GL === 'egl' ? ['--use-gl=angle', '--use-angle=gl-egl', '--ignore-gpu-blocklist'] : ['--use-gl=angle', '--use-angle=gl', '--ignore-gpu-blocklist'] });
 const page = await browser.newPage({ viewport: { width: 960, height: 540 } });
 page.on('pageerror', (e) => console.log('[pageerror]', e.message));
 page.on('console', (m) => { if (m.type() === 'error' && !/texture/.test(m.text())) console.log('[console]', m.text().slice(0, 200)); });

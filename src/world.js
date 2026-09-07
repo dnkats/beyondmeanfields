@@ -109,7 +109,8 @@ export function rockH(x, z) {
 /** What you stand on at (x, z): the terrain, or a rock on top of it. */
 export function surfaceH(x, z) { return Math.max(terrainH(x, z), rockH(x, z)); }
 const CELL = 8;
-export function addCircle(x, z, r) { const k = `${Math.floor(x / CELL)},${Math.floor(z / CELL)}`; if (!COLLIDERS.grid.has(k)) COLLIDERS.grid.set(k, []); COLLIDERS.grid.get(k).push({ x, z, r }); }
+const gridKey = (cx, cz) => (cx + 4096) * 8192 + (cz + 4096);   // a number, not a template string: this runs many times per frame
+export function addCircle(x, z, r) { const k = gridKey(Math.floor(x / CELL), Math.floor(z / CELL)); if (!COLLIDERS.grid.has(k)) COLLIDERS.grid.set(k, []); COLLIDERS.grid.get(k).push({ x, z, r }); }
 export function addBox(x, z, w, d, rot = 0) { COLLIDERS.boxes.push({ x, z, hw: w / 2, hd: d / 2, c: Math.cos(rot), s: Math.sin(rot) }); }
 /** Pushes point p ({x, z}, radius pr) out of every collider it overlaps. Returns true when it moved the point. */
 export function resolveCollisions(p, pr) {
@@ -118,7 +119,7 @@ export function resolveCollisions(p, pr) {
     let moved = false;
     const cx = Math.floor(p.x / CELL), cz = Math.floor(p.z / CELL);
     for (let i = -1; i <= 1; i++) for (let j = -1; j <= 1; j++) {
-      const list = COLLIDERS.grid.get(`${cx + i},${cz + j}`); if (!list) continue;
+      const list = COLLIDERS.grid.get(gridKey(cx + i, cz + j)); if (!list) continue;
       for (const c of list) { const dx = p.x - c.x, dz = p.z - c.z, d = Math.hypot(dx, dz), min = c.r + pr;
         if (d < min) { if (d > 1e-4) { const k = (min - d) / d; p.x += dx * k; p.z += dz * k; } else p.x += min; moved = true; } }
     }
@@ -139,7 +140,7 @@ export const SUN_DIR = new THREE.Vector3(-0.45, 0.66, 0.42).normalize();   // di
 export function createRenderer(canvas, quality) {
   const renderer = new THREE.WebGLRenderer({ canvas, antialias: !quality.post, powerPreference: 'high-performance' });
   renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, quality.pr || 1));
-  renderer.shadowMap.enabled = true; renderer.shadowMap.type = quality.high || quality.post ? THREE.PCFSoftShadowMap : THREE.PCFShadowMap;
+  renderer.shadowMap.enabled = true; renderer.shadowMap.type = THREE.PCFShadowMap;   // PCFSoft is deprecated in r185 and fell back to PCF anyway
   renderer.toneMapping = THREE.ACESFilmicToneMapping; renderer.toneMappingExposure = 0.8;
   return renderer;
 }

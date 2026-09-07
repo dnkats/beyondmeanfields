@@ -33,7 +33,7 @@ mkdirSync('shots', { recursive: true });
 const server = await createServer({ root: new URL('..', import.meta.url).pathname, server: { port: 5199, strictPort: true }, logLevel: 'error' });
 await server.listen();
 const GL = process.env.GL || 'llvmpipe';   // llvmpipe (Mesa, multi-threaded) is much faster than SwiftShader for readback
-const browser = await chromium.launch({ args: GL === 'swiftshader' ? ['--use-angle=swiftshader', '--enable-unsafe-swiftshader', '--ignore-gpu-blocklist'] : ['--use-gl=angle', '--use-angle=gl', '--ignore-gpu-blocklist', '--enable-gpu-rasterization'] });
+const browser = await chromium.launch({ args: GL === 'swiftshader' ? ['--use-angle=swiftshader', '--enable-unsafe-swiftshader', '--ignore-gpu-blocklist'] : GL === 'egl' ? ['--use-gl=angle', '--use-angle=gl-egl', '--ignore-gpu-blocklist'] : ['--use-gl=angle', '--use-angle=gl', '--ignore-gpu-blocklist', '--enable-gpu-rasterization'] });   // GL=egl: the real GPU through EGL (works headless on NVIDIA/Mesa without an X display)
 const Q = process.env.Q || 'low', W = parseInt(process.env.W || '1280', 10), H = parseInt(process.env.H || '720', 10);
 const page = await browser.newPage({ viewport: { width: W, height: H } });
 const seen = new Set();
@@ -51,6 +51,7 @@ for (const n of names) {
   if (v.dom || process.env.DOM) { try { await page.evaluate(() => window.__dbg.snapshot()); await page.screenshot({ path: `shots/${n}.png`, timeout: 240000 }); } catch (e) { console.log('dom screenshot failed, falling back:', e.message.split('\n')[0]); const dataUrl = await page.evaluate(() => window.__dbg.snapshot()); writeFileSync(`shots/${n}.png`, Buffer.from(dataUrl.split(',')[1], 'base64')); } }
   else { const dataUrl = await page.evaluate(() => window.__dbg.snapshot()); writeFileSync(`shots/${n}.png`, Buffer.from(dataUrl.split(',')[1], 'base64')); }
   console.log('saved shots/' + n + '.png', ((Date.now() - ts) / 1000).toFixed(1) + 's');
+  if (process.env.INFO) { try { console.log('info', n, ':', await page.evaluate(() => { const r = window.__dbg.renderer; window.__dbg.frameTime(); const i = r.info.render; return `calls ${i.calls} tris ${i.triangles} frame ${window.__dbg.frameTime().toFixed(1)} ms programs ${r.info.programs.length}`; })); } catch (e) { console.log('info failed', e.message); } }
   if (v.probe) { try { console.log('probe', n, ':', await page.evaluate(v.probe)); } catch (e) { console.log('probe failed', e.message); } }
 }
 const info = await page.evaluate(() => (window.__dbg && window.__dbg.renderer) ? JSON.stringify(window.__dbg.renderer.info.render) + ' ' + JSON.stringify({ geometries: window.__dbg.renderer.info.memory.geometries, textures: window.__dbg.renderer.info.memory.textures }) : 'no dbg').catch(() => '');

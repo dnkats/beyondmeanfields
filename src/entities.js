@@ -18,6 +18,7 @@ export const hex = (c) => '#' + c.toString(16).padStart(6, '0');
 export function createEntities(scene, ctx) {
   // ctx: { player (pos, hp...), level(), staffDmg(), onEnemyKilled, onBossHit, onPlayerDeath, onPickup, cam }
   const E = { enemies: [], pickups: [], bolts: [] };
+  const _a = new THREE.Vector3(), _b = new THREE.Vector3();   // scratch: the update loops run every frame and must not allocate
   const ENEMY = {
     osc:  { name: 'SCF Oscillator',      hp: 30,  dmg: 8,  speed: 2.6, color: COL.green,  xp: 12, r: 0.9 },
     div:  { name: 'Divergent Amplitude', hp: 45,  dmg: 12, speed: 2.9, color: COL.purple, xp: 18, r: 0.9 },
@@ -79,7 +80,7 @@ export function createEntities(scene, ctx) {
   };
   E.updateBolts = (dt) => {
     for (let i = E.bolts.length - 1; i >= 0; i--) { const b = E.bolts[i]; b.life -= dt; b.g.position.addScaledVector(b.v, dt); let hit = false;
-      for (const e of E.enemies) { if (!e.dead && b.g.position.distanceTo(e.pos.clone().setY(e.pos.y + 1)) < e.spec.r + 0.4) { E.damageEnemy(e, 18 + 3 * ctx.level(), ctx.player.pos, 0.8); Sfx.hit(); hit = true; break; } }
+      for (const e of E.enemies) { if (!e.dead && b.g.position.distanceTo(_a.copy(e.pos).setY(e.pos.y + 1)) < e.spec.r + 0.4) { E.damageEnemy(e, 18 + 3 * ctx.level(), ctx.player.pos, 0.8); Sfx.hit(); hit = true; break; } }
       if (hit || b.life <= 0 || b.g.position.y < terrainH(b.g.position.x, b.g.position.z)) { scene.remove(b.g); E.bolts.splice(i, 1); } }
   };
   E.updateEnemies = (dt, frozen) => {
@@ -93,14 +94,14 @@ export function createEntities(scene, ctx) {
       if (e.type === 'boss') { e.g.userData.ring.rotation.z += dt; e.g.userData.core.scale.setScalar(0.8 + 0.2 * Math.sin(e.t * 5)); }
       if (e.hitT > 0) { e.hitT -= dt; const m = e.g.children[0].material; if (m.emissive) m.emissiveIntensity = e.hitT > 0 ? 2.5 : 0.3; }
       e.atkCd -= dt;
-      const toP = P.pos.clone().sub(e.pos).setY(0), d = toP.length(); let vx = 0, vz = 0;
-      if (!frozen && !e.frozen && d < (e.type === 'boss' ? 30 : 13) && e.home.distanceTo(new THREE.Vector3(P.pos.x, 0, P.pos.z)) < 30) {
+      const toP = _a.copy(P.pos).sub(e.pos).setY(0), d = toP.length(); let vx = 0, vz = 0;
+      if (!frozen && !e.frozen && d < (e.type === 'boss' ? 30 : 13) && Math.hypot(e.home.x - P.pos.x, e.home.z - P.pos.z) < 30) {
         if (d > 1.2 + e.spec.r * 0.5) { toP.normalize(); vx = toP.x * e.spec.speed; vz = toP.z * e.spec.speed; }
         else if (e.atkCd <= 0) { e.atkCd = 1.1; E.hurtPlayer(e.spec.dmg, e.pos); }
-      } else { const toH = e.home.clone().sub(new THREE.Vector3(e.pos.x, 0, e.pos.z)); if (toH.length() > 1.5) { toH.normalize(); vx = toH.x * e.spec.speed * 0.6; vz = toH.z * e.spec.speed * 0.6; } else if (e.hp < e.spec.hp) e.hp = Math.min(e.spec.hp, e.hp + dt * 8); }
+      } else { const toH = _b.set(e.home.x - e.pos.x, 0, e.home.z - e.pos.z); if (toH.length() > 1.5) { toH.normalize(); vx = toH.x * e.spec.speed * 0.6; vz = toH.z * e.spec.speed * 0.6; } else if (e.hp < e.spec.hp) e.hp = Math.min(e.spec.hp, e.hp + dt * 8); }
       if (vx || vz) { const nx = e.pos.x + vx * dt, nz = e.pos.z + vz * dt; if (walkable(nx, nz) && terrainH(nx, nz) - terrainH(e.pos.x, e.pos.z) < 0.7) { e.pos.x = nx; e.pos.z = nz; } }
       e.pos.y = terrainH(e.pos.x, e.pos.z);
-      for (const o of E.enemies) if (o !== e && !o.dead) { const dd = e.pos.distanceTo(o.pos), min = e.spec.r + o.spec.r; if (dd < min && dd > 0.01) { const push = e.pos.clone().sub(o.pos).setY(0).normalize().multiplyScalar((min - dd) * 0.5); e.pos.x += push.x; e.pos.z += push.z; } }
+      for (const o of E.enemies) if (o !== e && !o.dead) { const dd = e.pos.distanceTo(o.pos), min = e.spec.r + o.spec.r; if (dd < min && dd > 0.01) { const push = _b.copy(e.pos).sub(o.pos).setY(0).normalize().multiplyScalar((min - dd) * 0.5); e.pos.x += push.x; e.pos.z += push.z; } }
     }
   };
   E.hurtPlayer = (dmg, from) => {

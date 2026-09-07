@@ -144,14 +144,17 @@ async function build() {
 
   post = createPost(renderer, scene, camera, quality); resize();
   // adaptive resolution: keep the frame rate playable on weaker GPUs by scaling the render resolution
-  const fpsState = { acc: 0, n: 0, t: 0, pr: quality.pr };
+  // Every resolution change reallocates all render targets (a visible stall), so changes are rare: step down after 2 s below
+  // 40 fps, step up only after 12 s above 55 fps, and when a step up is followed by a step down within 30 s the level is
+  // locked for a minute instead of oscillating between the two.
+  const fpsState = { acc: 0, n: 0, t: 0, pr: quality.pr, good: 0, lastUp: -1e9, lockUntil: 0, now: 0 };
   const renderFrame = (dt = 0) => {
     updateLOD(camera.position, quality.lodNear, quality.lodFar);
     if (post) post.composer.render(); else renderer.render(scene, camera);
-    if (dt > 0 && !navigator.webdriver) { fpsState.acc += dt; fpsState.n++; fpsState.t += dt;
-      // react to slowdowns within 2 s and step down hard; step back up only after 8 s of comfortably fast frames
-      if (fpsState.t > 2) { const fps = fpsState.n / fpsState.acc; let pr = fpsState.pr; fpsState.good = fps > 58 ? (fpsState.good || 0) + fpsState.t : 0;
-        if (fps < 40 && pr > 0.5) pr = Math.max(0.5, pr - 0.15); else if (fpsState.good >= 8 && pr < quality.pr) { pr = Math.min(quality.pr, pr + 0.05); fpsState.good = 0; }
+    if (dt > 0 && !navigator.webdriver) { fpsState.acc += dt; fpsState.n++; fpsState.t += dt; fpsState.now += dt;
+      if (fpsState.t > 2) { const fps = fpsState.n / fpsState.acc, now = fpsState.now; let pr = fpsState.pr; fpsState.good = fps > 55 ? fpsState.good + fpsState.t : 0;
+        if (fps < 40 && pr > 0.5) { pr = Math.max(0.5, pr - 0.15); if (now - fpsState.lastUp < 30) fpsState.lockUntil = now + 60; }
+        else if (fpsState.good >= 12 && pr < quality.pr && now > fpsState.lockUntil) { pr = Math.min(quality.pr, pr + 0.1); fpsState.good = 0; fpsState.lastUp = now; }
         if (pr !== fpsState.pr) { fpsState.pr = pr; renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, pr)); resize(); }
         fpsState.acc = fpsState.n = fpsState.t = 0; } }
   };
@@ -161,7 +164,18 @@ async function build() {
   { const warm = new THREE.Group(); const mol = moleculeModel(ENCOUNTERS.water, null); warm.add(mol);
     const fx = createFX(warm, sigils, () => {}, null); fx.castRune(new THREE.Vector3(0, 0, 0), 'dcsd'); fx.projectile(new THREE.Vector3(0, 1, 0), { pos: new THREE.Vector3(0, 1, 5), dead: false }, 'ccsdt', () => {}); fx.impact(new THREE.Vector3(0, 1, 0), 'eom', 'best', '@cc eom-dcsd'); fx.backfire(new THREE.Vector3(0, 0, 0));
     const ghost = moleculeModel(ENCOUNTERS.h2co, null); warm.add(ghost); warm.position.copy(camera.position).add(new THREE.Vector3(0, 0, -6)); scene.add(warm);
-    try { await renderer.compileAsync(scene, camera); renderer.render(scene, camera); } catch (e) { /* ignore */ } scene.remove(warm); }   // the render also compiles the shadow-pass variants
+    // enemies and pickups have their own materials (flat shading, emissive, basic): compile them now too
+    const E = game.E, wp = camera.position; const warmE = ['osc', 'div', 'lin', 'boss'].map((t) => E.spawnEnemy(t, wp.x, wp.z - 6, 'warm'));
+    ['coffee', 'scroll', 'basisfn', 'key'].forEach((k) => E.spawnPickup(k, wp.x, wp.z - 6, 'warm'));
+    try { await renderer.compileAsync(scene, camera); renderer.render(scene, camera); } catch (e) { /* ignore */ } scene.remove(warm);   // the render also compiles the shadow-pass variants
+    for (const e of warmE) scene.remove(e.g); E.enemies.length = 0; for (const p of E.pickups) scene.remove(p.g); E.pickups.length = 0; }
+  // upload every texture to the GPU now: three.js otherwise uploads a texture the first time it is drawn, and walking into a
+  // new zone would push dozens of 1024² maps in a single frame
+  { const seen = new Set(); let n = 0;
+    const up = (t) => { if (t && t.isTexture && !seen.has(t)) { seen.add(t); try { renderer.initTexture(t); n++; } catch (e) { /* ignore */ } } };
+    scene.traverse((o) => { const mats = Array.isArray(o.material) ? o.material : o.material ? [o.material] : []; for (const m of mats) { for (const k in m) { const v = m[k]; if (v && v.isTexture) up(v); } if (m.uniforms) for (const k in m.uniforms) up(m.uniforms[k].value); } });
+    for (const s of Object.values(sigils)) up(s.tex);
+    console.log('textures uploaded:', n); }
   game.setSunOffset(SUN_DIR.clone().multiplyScalar(120));
   $('loadtxt').textContent = 'compiling shaders…';
   const tc = performance.now(); try { await renderer.compileAsync(scene, camera); } catch (e) { console.warn('compile', e); } console.log('shaders compiled in', ((performance.now() - tc) / 1000).toFixed(1), 's');

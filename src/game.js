@@ -139,14 +139,15 @@ export function createGame({ scene, camera, canvas, playerChar, npcs, alpaca, re
     if (e.hp <= 0) { e.dead = true; e.deadT = 0.6; P.xp += e.xp; E.burst(e.pos.clone(), color, 40, 6); Sfx.good(); onEncounterDefeated(e); }
     else if (e.enc.boss) onBossPhase(e);
   }
+  const _v1 = new THREE.Vector3(), _v2 = new THREE.Vector3();   // scratch for the per-frame loops
   function updateEncounters(dt, frozen) {
     for (let i = encs.length - 1; i >= 0; i--) {
       const e = encs[i]; e.t += dt; e.agit = Math.max(0, e.agit - dt);
       if (e.dead) { e.deadT -= dt; e.g.scale.setScalar(Math.max(0.01, e.deadT / 0.6)); if (e.deadT <= 0) { if (e.g.userData.light && lights) lights.release(e.g.userData.light); scene.remove(e.g); encs.splice(i, 1); } continue; }
       animateMolecule(e.g, dt, e.t, e.agit); coolMolecule(e.g, dt);
-      const toP = P.pos.clone().sub(e.pos).setY(0), d = toP.length();
+      const toP = _v1.copy(P.pos).sub(e.pos).setY(0), d = toP.length();
       if (!frozen && !e.frozen && d < (e.wild ? 8 : 10) && d > e.g.userData.radius + 1.2) { toP.normalize(); const sp = e.enc.boss ? 1.6 : 1.1; const nx = e.pos.x + toP.x * sp * dt, nz = e.pos.z + toP.z * sp * dt; if (walkable(nx, nz) && Math.hypot(nx - e.home.x, nz - e.home.z) < 14) { e.pos.x = nx; e.pos.z = nz; e.g.userData.baseY = terrainH(nx, nz); } }
-      else if (d > 14) { const toH = e.home.clone().sub(new THREE.Vector3(e.pos.x, 0, e.pos.z)); if (toH.length() > 1) { toH.normalize(); e.pos.x += toH.x * dt; e.pos.z += toH.z * dt; e.g.userData.baseY = terrainH(e.pos.x, e.pos.z); } }
+      else if (d > 14) { const toH = _v2.set(e.home.x - e.pos.x, 0, e.home.z - e.pos.z); if (toH.length() > 1) { toH.normalize(); e.pos.x += toH.x * dt; e.pos.z += toH.z * dt; e.g.userData.baseY = terrainH(e.pos.x, e.pos.z); } }
       e.atkCd -= dt;
       if (!frozen && !e.frozen && d < e.g.userData.radius + 1.6 && e.atkCd <= 0) { e.atkCd = 1.6; E.hurtPlayer(e.enc.boss ? 18 : 9 + e.enc.size * 2, e.pos); E.burst(P.pos.clone().setY(P.pos.y + 1), 0xa25be0, 10, 3); }
       if (e.tag === 'flee' && e.hp < e.enc.hp * 0.35) { e.dead = true; e.deadT = 0.6; toast('The stretched dinitrogen tears free and flees toward the tower. Single-reference spells cannot finish it.', 'purple'); E.burst(e.pos.clone(), 0xa25be0, 40, 6); }
@@ -358,17 +359,19 @@ export function createGame({ scene, camera, canvas, playerChar, npcs, alpaca, re
     if (q.id === 'fitting' && st === 3 && workbench) return [workbench.position.x, workbench.position.z];
     return npc ? [npc.pos.x, npc.pos.z] : null;
   }
-  let hudT = 0;
+  let hudT = 0; const hudLast = {};
+  /** Writes a DOM property only when the value changed: innerHTML and textContent writes cost layout even when identical. */
+  const setIf = (key, node, prop, val) => { if (hudLast[key] !== val) { hudLast[key] = val; node[prop] = val; } };
   function updateHUD(dt, target) {
     hudT -= dt; if (hudT > 0) return; hudT = 0.1;
-    const zn = zoneAt(P.pos.x, P.pos.z); el.zone.textContent = zn ? zn.name : 'The wilds';
-    el.hpbar.style.width = (100 * clamp(P.hp / maxHP(), 0, 1)).toFixed(0) + '%'; el.hpval.textContent = `${Math.max(0, Math.round(P.hp))} / ${maxHP()}`;
-    el.xpbar.style.width = (P.xp % 100) + '%'; el.xpval.textContent = `lvl ${level()}`;
-    el.manabar.style.width = (100 * clamp(P.mana / maxMana(), 0, 1)).toFixed(0) + '%'; el.manaval.textContent = `${Math.round(P.mana)} / ${maxMana()}`;
+    const zn = zoneAt(P.pos.x, P.pos.z); setIf('zone', el.zone, 'textContent', zn ? zn.name : 'The wilds');
+    setIf('hpw', el.hpbar.style, 'width', (100 * clamp(P.hp / maxHP(), 0, 1)).toFixed(0) + '%'); setIf('hp', el.hpval, 'textContent', `${Math.max(0, Math.round(P.hp))} / ${maxHP()}`);
+    setIf('xpw', el.xpbar.style, 'width', (P.xp % 100) + '%'); setIf('xp', el.xpval, 'textContent', `lvl ${level()}`);
+    setIf('mw', el.manabar.style, 'width', (100 * clamp(P.mana / maxMana(), 0, 1)).toFixed(0) + '%'); setIf('mana', el.manaval, 'textContent', `${Math.round(P.mana)} / ${maxMana()}`);
     const q = currentQuest();
-    if (q) { el.qtitle.textContent = q.title; el.qobj.innerHTML = q.obj[Q[q.id]].replace(/\{(\w+)\}/g, (_, t) => tagCount(t)); }
-    else { el.qtitle.textContent = ending ? 'The island converged' : 'No active quest'; el.qobj.textContent = ending ? 'Wander, or cast on whatever is left.' : ''; }
-    el.items.innerHTML = P.items.map((i) => ITEMS[i] ? `<span class="item ${ITEMS[i][1]}">${ITEMS[i][0]}</span>` : '').join('');
+    if (q) { setIf('qt', el.qtitle, 'textContent', q.title); setIf('qo', el.qobj, 'innerHTML', q.obj[Q[q.id]].replace(/\{(\w+)\}/g, (_, t) => tagCount(t))); }
+    else { setIf('qt', el.qtitle, 'textContent', ending ? 'The island converged' : 'No active quest'); setIf('qo', el.qobj, 'innerHTML', ending ? 'Wander, or cast on whatever is left.' : ''); }
+    setIf('items', el.items, 'innerHTML', P.items.map((i) => ITEMS[i] ? `<span class="item ${ITEMS[i][1]}">${ITEMS[i][0]}</span>` : '').join(''));
     if (boss && !boss.dead) el.bosshp.style.width = (100 * boss.hp / boss.enc.hp).toFixed(0) + '%';
     const g = el.compass.getContext('2d'); g.clearRect(0, 0, 88, 88); g.strokeStyle = '#cbd3e8'; g.lineWidth = 2; g.beginPath(); g.arc(44, 44, 38, 0, 6.283); g.stroke();
     if (target) { const a = Math.atan2(target[0] - P.pos.x, target[1] - P.pos.z), th = a - (cam.yaw + Math.PI);
@@ -530,7 +533,10 @@ export function createGame({ scene, camera, canvas, playerChar, npcs, alpaca, re
       }
       for (const n of npcList) { const d = n.pos.distanceTo(P.pos); n.c.root.visible = d < 90;   // skinned meshes are never frustum-culled, so hide far mentors outright
         if (d < 6) { const a = Math.atan2(P.pos.x - n.pos.x, P.pos.z - n.pos.z); n.c.heading += Math.atan2(Math.sin(a - n.c.heading), Math.cos(a - n.c.heading)) * Math.min(1, dt * 4); }
-        n.c.update(dt, {}); const q = QUESTS.find((x) => x.npc === n.id); n.mark.visible = !!q && questAvailable(q) && !questDone(q) && (Q[q.id] <= 1 || Q[q.id] === 3); n.mark.position.y = 2.6 + Math.sin(now * 0.004) * 0.12;
+        // animation: every frame when near, every 3rd frame at 30-90 m, every 10th when hidden (the mixer and bone matrices are the cost)
+        n.animAcc = (n.animAcc || 0) + dt; n.animN = (n.animN || 0) + 1; const every = d < 30 ? 1 : d < 90 ? 3 : 10;
+        if (n.animN >= every) { n.c.update(n.animAcc, {}); n.animAcc = 0; n.animN = 0; }
+        const q = QUESTS.find((x) => x.npc === n.id); n.mark.visible = !!q && questAvailable(q) && !questDone(q) && (Q[q.id] <= 1 || Q[q.id] === 3); n.mark.position.y = 2.6 + Math.sin(now * 0.004) * 0.12;
         const sq = n.mark.visible ? null : sqForNpc(n.id); n.mark2.visible = !!sq && (SQ[sq.id] === 1 ? sqSatisfied(sq) : true); n.mark2.position.y = n.mark.position.y; }
       E.updateEnemies(dt, frozen); E.updateBolts(dt); E.updatePickups(dt); E.updateParticles(dt); updateEncounters(dt, frozen); updateWild(dt); updateBolts(dt); cam.update(dt, P);
       if (P.target && P.target.dead) P.target = null; targetRing.visible = !!P.target; if (P.target) { targetRing.position.set(P.target.pos.x, terrainH(P.target.pos.x, P.target.pos.z) + 0.05, P.target.pos.z); targetRing.scale.setScalar(0.7 + P.target.g.userData.radius * 0.5); targetRing.rotation.z += dt; }
