@@ -126,7 +126,9 @@ async function build() {
   for (const n of NPCS) {
     let c = null;
     try { c = await createCharacter(n.model, lib, { female: n.female, tint: n.tint }); } catch (e) { console.warn('npc model failed', n.model, e.message); c = await createCharacter(n.fallback || 'xbot', lib, { female: n.female }); }
-    const zn = zoneById(n.zone); c.pos.set(zn.x + n.dx, (n.deck ? surfaceH : terrainH)(zn.x + n.dx, zn.z + n.dz), zn.z + n.dz);   // only deck-dwellers stand on rock fields (the Keeper once ended up on the cliff) c.heading = Math.random() * 6; scene.add(c.root); npcs[n.id] = c; addCircle(c.pos.x, c.pos.z, 0.5);
+    // only deck-dwellers stand on rock fields (the Keeper once ended up on top of the cliff)
+    const zn = zoneById(n.zone); c.pos.set(zn.x + n.dx, (n.deck ? surfaceH : terrainH)(zn.x + n.dx, zn.z + n.dz), zn.z + n.dz);
+    c.heading = Math.random() * 6; scene.add(c.root); npcs[n.id] = c; addCircle(c.pos.x, c.pos.z, 0.5);
   }
   // the Alpaca (cameo, procedural)
   const alpaca = new THREE.Group();
