@@ -311,6 +311,7 @@ export function createGame({ scene, camera, canvas, playerChar, npcs, alpaca, re
   function showDialog(id) {
     const node = typeof id === 'string' ? D[id] : id; if (!node) return;
     dlg.node = node; dlg.full = node.text; dlg.shown = 0; dlg.typing = true; dlg.t = 0; dlg.choices = node.choices || [];
+    if (dlg.choices.some((c) => c.ok !== undefined)) { const a = dlg.choices.slice(); for (let i = a.length - 1; i > 0; i--) { const j = Math.floor(Math.random() * (i + 1)); [a[i], a[j]] = [a[j], a[i]]; } dlg.choices = a; }   // quiz answers in random order; offers keep theirs
     const who = WHO[node.who]; el.dname.textContent = who[0]; el.dsw.style.background = who[1];
     el.dtext.textContent = ''; el.dcode.innerHTML = node.code ? hl(node.code) : ''; el.dchoices.innerHTML = ''; el.dnext.textContent = '';
     el.dlg.hidden = false; Sfx.talk(); for (const n of npcList) n.c.talking = n.id === node.who; unlockPointer();
