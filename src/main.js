@@ -56,7 +56,7 @@ async function build() {
   // vegetation
   const jobs = [];
   // trees: Quaternius Stylized Nature MegaKit (CC0), 1.6-10k triangles each with solid leaf geometry; every type gets a billboard impostor for the distance
-  const tree = (name, n, opts, collide = 0.3) => jobs.push(scatterModel(scene, name, placements(Math.round(n * T), opts), { foliage: true, impostor: true, collide }));
+  const tree = (name, n, opts, collide = 0.3) => jobs.push(scatterModel(scene, name, placements(Math.round(n * T), { zoneMargin: 1.1, ...opts }), { foliage: true, impostor: true, collide }));   // crowns stay clear of the zone rims so the camera is not buried in leaves
   const ring = { near: { x: forest.x, z: forest.z, r0: 5, r1: 17 }, avoidZones: false, minDist: 3.6, exclude: [{ x: forest.x - 1, z: forest.z, r: 4 }] };
   tree('q_pine_1', 18, { ...ring, scale: [0.9, 1.4] }); tree('q_pine_3', 16, { ...ring, scale: [0.9, 1.3], seedOffset: 1 }); tree('q_tree_3', 12, { ...ring, scale: [0.9, 1.2], seedOffset: 2 });
   tree('q_pine_2', 24, { minDist: 4.5, scale: [0.9, 1.4], maxH: 8.5 }); tree('q_pine_4', 20, { minDist: 4.5, scale: [0.9, 1.3], maxH: 8.5, seedOffset: 3 }); tree('q_pine_5', 16, { minDist: 4.5, scale: [0.9, 1.3], maxH: 8.5, seedOffset: 4 });
@@ -99,7 +99,9 @@ async function build() {
   props.push(cottage(scene, forest.x + 4, forest.z - 6, { w: 4.2, d: 3.8, rot: 0.4, roof: 'roof_slates_02', wall: 'white_stucco' }), placeModel(scene, 'wooden_lantern_01', forest.x + 1.5, forest.z - 3, {}));
   props.push(placeModel(scene, 'coastal_cliff_02', cv.x + 8, cv.z - 6, { rot: 0.6, scale: 0.9, field: true }), placeModel(scene, 'rock_face_01', cv.x + 3, cv.z - 10, { rot: 2.2, scale: 1.1, field: true }), placeModel(scene, 'large_castle_door', cv.x + 2.5, cv.z + 2.5, { rot: -0.6 }).then((o) => { o.position.y += 1.15; }), placeModel(scene, 'treasure_chest', cv.x + 12.5, cv.z - 9, { rot: 2.4 }), placeModel(scene, 'wooden_lantern_01', cv.x - 2, cv.z + 4, {}));
   props.push(placeModel(scene, 'stone_fire_pit', rg.x, rg.z + 3, {}), placeModel(scene, 'wooden_lantern_01', rg.x + 2, rg.z, {}));
-  for (let i = 0; i < 6; i++) { const a = i / 6 * 6.283; props.push(placeModel(scene, 'rock_face_01', rg.x + Math.cos(a) * 8, rg.z + Math.sin(a) * 8, { rot: -a, scale: 0.55 + (i % 2) * 0.25, field: true })); }
+  // the ridge crown: boulders in a ring (the flat rock_face slabs read as paper), two faces for the drop on the sea side
+  for (let i = 0; i < 7; i++) { const a = i / 7 * 6.283 + 0.4; props.push(placeModel(scene, 'namaqualand_boulder_02', rg.x + Math.cos(a) * 8.5, rg.z + Math.sin(a) * 8.5, { rot: a * 1.7, scale: 1.1 + (i % 3) * 0.25, field: true })); }
+  props.push(placeModel(scene, 'rock_face_01', rg.x + 9, rg.z - 6, { rot: 2.4, scale: 0.9, field: true }), placeModel(scene, 'rock_face_01', rg.x + 4, rg.z - 10, { rot: 1.2, scale: 0.8, field: true }));
   props.push(tower(scene, tw.x, tw.z - 4, tw.h), placeModel(scene, 'large_castle_door', tw.x, tw.z + 0.4, { rot: 0 }).then((o) => { o.position.y += 1.15; }), placeModel(scene, 'cannon_01', tw.x + 6, tw.z + 2, { rot: 2.4 }), placeModel(scene, 'wooden_lantern_01', tw.x - 4, tw.z + 3, {}));
   const settled = await Promise.allSettled(props); settled.forEach((r) => { if (r.status === 'rejected') console.warn('prop failed', r.reason && r.reason.message); });
 
@@ -135,7 +137,7 @@ async function build() {
   }
   // the Alpaca (cameo, procedural)
   const alpaca = new THREE.Group();
-  { const cream = new THREE.MeshStandardMaterial({ color: 0xf3ead7, roughness: 0.95 });
+  { const cream = new THREE.MeshStandardMaterial({ color: 0xd8cbb2, roughness: 0.95 });   // not white: white fur blows out in the sun
     const body = new THREE.Mesh(new THREE.BoxGeometry(0.9, 0.8, 1.6), cream); body.position.y = 1.1; alpaca.add(body);
     const neck = new THREE.Mesh(new THREE.CylinderGeometry(0.22, 0.22, 1.1, 12), cream); neck.position.set(0, 1.9, 0.6); neck.rotation.x = -0.25; alpaca.add(neck);
     const head = new THREE.Mesh(new THREE.BoxGeometry(0.4, 0.4, 0.7), cream); head.position.set(0, 2.45, 0.85); alpaca.add(head);

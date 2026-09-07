@@ -5,11 +5,10 @@ import { RenderPass } from 'three/addons/postprocessing/RenderPass.js';
 import { GTAOPass } from 'three/addons/postprocessing/GTAOPass.js';
 import { UnrealBloomPass } from 'three/addons/postprocessing/UnrealBloomPass.js';
 import { OutputPass } from 'three/addons/postprocessing/OutputPass.js';
-import { SMAAPass } from 'three/addons/postprocessing/SMAAPass.js';
 import { ShaderPass } from 'three/addons/postprocessing/ShaderPass.js';
 /** A small film-style grade applied after tone mapping: lifted contrast, a touch more saturation, warm highlights and cool shadows, a soft vignette. */
 const GradeShader = {
-  uniforms: { tDiffuse: { value: null }, uContrast: { value: 1.05 }, uSaturation: { value: 1.08 }, uVignette: { value: 0.28 }, uAspect: { value: 16 / 9 } },
+  uniforms: { tDiffuse: { value: null }, uContrast: { value: 1.08 }, uSaturation: { value: 1.18 }, uVignette: { value: 0.28 }, uAspect: { value: 16 / 9 } },   // AgX is neutral by design; the grade puts the colour back
   vertexShader: `varying vec2 vUv; void main() { vUv = uv; gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0); }`,
   fragmentShader: `uniform sampler2D tDiffuse; uniform float uContrast, uSaturation, uVignette, uAspect; varying vec2 vUv;
     void main() {
@@ -146,11 +145,11 @@ export function createRenderer(canvas, quality) {
   const renderer = new THREE.WebGLRenderer({ canvas, antialias: !quality.post, powerPreference: 'high-performance' });
   renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, quality.pr || 1));
   renderer.shadowMap.enabled = true; renderer.shadowMap.type = THREE.PCFShadowMap;   // PCFSoft is deprecated in r185 and fell back to PCF anyway
-  renderer.toneMapping = THREE.ACESFilmicToneMapping; renderer.toneMappingExposure = 0.8;
+  renderer.toneMapping = THREE.AgXToneMapping; renderer.toneMappingExposure = 1.12;   // AgX: neutral hues in the highlights where ACES skewed towards the primaries
   return renderer;
 }
 export function createLights(scene, quality) {
-  const sun = new THREE.DirectionalLight(0xfff3df, 3.8); sun.castShadow = true;
+  const sun = new THREE.DirectionalLight(0xfff3df, 3.3); sun.castShadow = true;
   const S = quality.shadow || 2048; sun.shadow.mapSize.set(S, S);
   const R = quality.shadowRange || 40;   // a tighter box means fewer casters per frame and more texels per metre
   const sc = sun.shadow.camera; sc.left = sc.bottom = -R; sc.right = sc.top = R; sc.near = 40; sc.far = 220;
@@ -194,18 +193,23 @@ export async function buildTerrain(scene, quality) {
   const pos = geo.attributes.position;
   for (let i = 0; i < pos.count; i++) pos.setY(i, terrainH(pos.getX(i), pos.getZ(i)));
   geo.computeVertexNormals();
-  const [grass, forest, sand, rock] = await Promise.all([loadPBR('leafy_grass'), loadPBR('forest_floor'), loadPBR('coast_sand_01'), loadPBR('cliff_side')]);
+  const [grass, forest, sand, rock, meadow] = await Promise.all([loadPBR('leafy_grass'), loadPBR('forest_floor'), loadPBR('coast_sand_01'), loadPBR('cliff_side'), loadPBR('aerial_grass_rock')]);
   const mat = new THREE.MeshStandardMaterial({ roughness: 1, metalness: 0, envMapIntensity: 0.6 });
   const forestZ = zoneById('forest');
   mat.onBeforeCompile = (sh) => {
     Object.assign(sh.uniforms, { tG: { value: grass.map }, tGN: { value: grass.normalMap }, tGA: { value: grass.aoMap }, tF: { value: forest.map }, tFN: { value: forest.normalMap }, tFA: { value: forest.aoMap },
       tS: { value: sand.map }, tSN: { value: sand.normalMap }, tSA: { value: sand.aoMap }, tR: { value: rock.map }, tRN: { value: rock.normalMap }, tRA: { value: rock.aoMap },
+      tM: { value: meadow.map }, tMN: { value: meadow.normalMap }, tMA: { value: meadow.aoMap },
       uForest: { value: new THREE.Vector2(forestZ.x, forestZ.z) }, uForestR: { value: forestZ.r } });
     sh.vertexShader = 'varying vec3 vWPos; varying vec3 vWNormal;\n' + sh.vertexShader
       .replace('#include <begin_vertex>', '#include <begin_vertex>\n vWPos = (modelMatrix * vec4(transformed, 1.0)).xyz;')
       .replace('#include <beginnormal_vertex>', '#include <beginnormal_vertex>\n vWNormal = normalize(mat3(modelMatrix) * objectNormal);');
-    sh.fragmentShader = `varying vec3 vWPos; varying vec3 vWNormal; uniform sampler2D tG, tGN, tGA, tF, tFN, tFA, tS, tSN, tSA, tR, tRN, tRA; uniform vec2 uForest; uniform float uForestR;
-      vec3 gTN; vec4 gTA;\n` + sh.fragmentShader
+    sh.fragmentShader = `varying vec3 vWPos; varying vec3 vWNormal; uniform sampler2D tG, tGN, tGA, tF, tFN, tFA, tS, tSN, tSA, tR, tRN, tRA, tM, tMN, tMA; uniform vec2 uForest; uniform float uForestR;
+      vec3 gTN; vec4 gTA;
+      // value noise for the large-scale variation (two octaves are enough at 30-100 m wavelengths)
+      float thash(vec2 p) { return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453); }
+      float tnoise(vec2 p) { vec2 i = floor(p), f = fract(p); f = f * f * (3.0 - 2.0 * f);
+        return mix(mix(thash(i), thash(i + vec2(1, 0)), f.x), mix(thash(i + vec2(0, 1)), thash(i + vec2(1, 1)), f.x), f.y); }\n` + sh.fragmentShader
       .replace('#include <map_fragment>', `
         vec3 wN = normalize(vWNormal); float slope = 1.0 - wN.y; float h = vWPos.y;
         vec2 uvG = vWPos.xz * 0.17, uvF = vWPos.xz * 0.15, uvS = vWPos.xz * 0.2;
@@ -215,6 +219,11 @@ export async function buildTerrain(scene, quality) {
         vec4 rN = texture2D(tRN, rx) * bw.x + texture2D(tRN, ry) * bw.y + texture2D(tRN, rz) * bw.z;
         vec4 rA = texture2D(tRA, rx) * bw.x + texture2D(tRA, ry) * bw.y + texture2D(tRA, rz) * bw.z;
         vec4 gD = texture2D(tG, uvG), gN = texture2D(tGN, uvG), gA = texture2D(tGA, uvG);
+        // meadow patches: a second grass set blended in by low-frequency noise, and the tile itself sampled at a second scale to break the repeat
+        float macro = tnoise(vWPos.xz * 0.035) * 0.65 + tnoise(vWPos.xz * 0.09) * 0.35;
+        vec2 uvM = vWPos.xz * 0.12; vec4 mD = texture2D(tM, uvM), mN = texture2D(tMN, uvM), mA = texture2D(tMA, uvM);
+        float wMeadow = 0.7 * smoothstep(0.45, 0.65, macro);
+        gD = mix(gD, mD, wMeadow); gN = mix(gN, mN, wMeadow); gA = mix(gA, mA, wMeadow);
         vec4 fD = texture2D(tF, uvF), fN = texture2D(tFN, uvF), fA = texture2D(tFA, uvF);
         vec4 sD = texture2D(tS, uvS), sN = texture2D(tSN, uvS), sA = texture2D(tSA, uvS);
         float wRock = clamp(smoothstep(0.22, 0.5, slope) + smoothstep(8.6, 10.6, h), 0.0, 1.0);
@@ -225,7 +234,7 @@ export async function buildTerrain(scene, quality) {
         D = mix(D, sD, wSand); Nm = mix(Nm, sN, wSand); Am = mix(Am, sA, wSand);
         D = mix(D, rD, wRock); Nm = mix(Nm, rN, wRock); Am = mix(Am, rA, wRock);
         D = mix(D, vec4(0.9, 0.93, 0.97, 1.0), wSnow);
-        D.rgb *= 0.92 + 0.16 * sin(vWPos.x * 0.05 + sin(vWPos.z * 0.04) * 3.0);
+        D.rgb *= 0.9 + 0.2 * tnoise(vWPos.xz * 0.06 + 7.0);   // ±10 % brightness at a 15 m wavelength: the ground stops reading as one flat tile
         diffuseColor *= D; gTN = Nm.xyz * 2.0 - 1.0; gTA = Am;`)
       .replace('#include <normal_fragment_maps>', `
         vec3 wPN = normalize(normalize(vWNormal) + vec3(gTN.x, 0.0, gTN.y) * 0.9);
@@ -349,6 +358,7 @@ export async function scatterModel(scene, name, placements, { foliage = false, s
   if (!placements.length) return [];
   const gltf = await loadModel(name);
   prepareModel(gltf.scene, { foliage, envMapIntensity });
+  if (foliage) gltf.scene.traverse((o) => { if (o.isMesh && /leaf|leaves|grass|fern|flower/i.test(o.material.name)) windSway(o.material, 0.003); });   // crowns sway a little (the shift grows with height squared)
   if (tint) gltf.scene.traverse((o) => { if (o.isMesh && tint[o.material.name]) { o.material = o.material.clone(); o.material.color.multiply(new THREE.Color(tint[o.material.name])); } });   // per material name, e.g. a green bush from a red-leaved one
   let lodParts = null;
   try { const lod = await loadGLTF(`models/${name}/${name}.lod.glb`); prepareModel(lod.scene, { foliage, envMapIntensity, alphaTest: 0.12 }); lodParts = bakedParts(lod); } catch (e) { /* no LOD variant */ }   // far cards stay solid instead of dissolving
@@ -461,7 +471,7 @@ export async function cottage(scene, x, z, { w = 5, d = 4.2, h = 2.9, rot = 0, r
   for (const s of [-1, 1]) { const gm = new THREE.Mesh(scaleUV(new THREE.ShapeGeometry(gable), 0.45, 0.45), wallM); gm.rotation.y = s * Math.PI / 2; gm.position.set(s * (w / 2 - 0.01), h, 0); gm.castShadow = true; gm.receiveShadow = true; g.add(gm); if (s === -1) gm.material = wallM; }
   const chimney = box(0.7, 1.6, 0.7, brickM, 0.8); chimney.position.set(w * 0.3, h + rh * 0.55 + 0.4, -d * 0.15); g.add(chimney);
   const doorM = await tex('dark_wood', 1); const door = box(1.0, 2.0, 0.12, doorM, 0.5); door.position.set(-w * 0.2, 1.0, d / 2 + 0.05); g.add(door);
-  const glass = new THREE.MeshPhysicalMaterial({ color: 0xfff1c8, emissive: 0xffd28a, emissiveIntensity: 0.45, roughness: 0.1, metalness: 0 });
+  const glass = new THREE.MeshPhysicalMaterial({ color: 0xfff1c8, emissive: 0xffd28a, emissiveIntensity: 0.12, roughness: 0.1, metalness: 0 });   // a warm pane, not a floodlight
   for (const [px, pz, ry] of [[w * 0.2, d / 2 + 0.05, 0], [w / 2 + 0.05, 0, Math.PI / 2], [-w / 2 - 0.05, 0.6, Math.PI / 2]]) { const win = new THREE.Mesh(new THREE.BoxGeometry(0.9, 0.9, 0.08), glass); win.position.set(px, 1.6, pz); win.rotation.y = ry; g.add(win);
     const frame = box(1.05, 1.05, 0.1, woodM, 0.8); frame.position.copy(win.position).add(new THREE.Vector3(0, 0, ry ? 0 : -0.02)); frame.rotation.y = ry; g.add(frame); win.position.z += ry ? 0 : 0.02; }
   g.position.set(x, terrainH(x, z) - 0.15, z); g.rotation.y = rot; scene.add(g); addBox(x, z, w + 0.5, d + 0.5, rot); return g;
@@ -474,7 +484,7 @@ export async function tower(scene, x, z, h0) {
   const roof = new THREE.Mesh(scaleUV(new THREE.ConeGeometry(4.6, 5.5, 24, 1, true), 8, 3), slate); roof.position.y = 18.2; roof.castShadow = true; g.add(roof);
   for (let i = 0; i < 12; i++) { const a = i / 12 * 6.283; const merlon = box(1.0, 1.0, 0.7, brick, 0.8); merlon.position.set(Math.cos(a) * 4.1, 16.1, Math.sin(a) * 4.1); merlon.rotation.y = -a; g.add(merlon); }
   const door = box(1.6, 2.6, 0.2, wood, 0.6); door.position.set(0, 1.3, 4.1); g.add(door);
-  const glow = new THREE.MeshPhysicalMaterial({ color: 0xffe0a0, emissive: 0xffb347, emissiveIntensity: 1.2 });
+  const glow = new THREE.MeshPhysicalMaterial({ color: 0xffe0a0, emissive: 0xffb347, emissiveIntensity: 0.5 });
   for (let i = 0; i < 4; i++) { const win = new THREE.Mesh(new THREE.BoxGeometry(0.6, 1.0, 0.2), glow); const a = i * 1.57 + 0.3; win.position.set(Math.cos(a) * 3.9, 5 + i * 2.6, Math.sin(a) * 3.9); win.rotation.y = -a + Math.PI / 2; g.add(win); }
   g.position.set(x, h0 - 0.2, z); scene.add(g); addCircle(x, z, 4.5); return g;
 }
@@ -483,14 +493,15 @@ export async function tower(scene, x, z, h0) {
 export function createPost(renderer, scene, camera, quality) {
   if (!quality.post) return null;
   const size = renderer.getSize(new THREE.Vector2()), pr = renderer.getPixelRatio();
-  const composer = new EffectComposer(renderer, new THREE.WebGLRenderTarget(size.x * pr, size.y * pr, { type: THREE.HalfFloatType }));
+  // the scene renders into a 4x multisampled target: hardware anti-aliasing of the geometry instead of the three full-screen SMAA passes
+  const composer = new EffectComposer(renderer, new THREE.WebGLRenderTarget(size.x * pr, size.y * pr, { type: THREE.HalfFloatType, samples: quality.high ? 4 : 2 }));
   composer.addPass(new RenderPass(scene, camera));
   let gtao = null; const AO_SCALE = 0.5;   // ambient occlusion at half resolution: a quarter of the pixel work, the blur hides it
   if (quality.ao) { gtao = new GTAOPass(scene, camera, size.x * AO_SCALE, size.y * AO_SCALE); gtao.blendIntensity = 0.65; gtao.updateGtaoMaterial({ radius: 0.8, distanceExponent: 1, thickness: 1, scale: 1.1, samples: 8, distanceFallOff: 1 }); composer.addPass(gtao); }
-  const bloom = quality.bloom !== false ? new UnrealBloomPass(new THREE.Vector2(size.x, size.y), 0.18, 0.55, 0.88) : null; if (bloom) composer.addPass(bloom);
+  const BLOOM_SCALE = 0.5;   // bloom is a blur: half resolution is invisible and a quarter of the work
+  const bloom = quality.bloom !== false ? new UnrealBloomPass(new THREE.Vector2(size.x * BLOOM_SCALE, size.y * BLOOM_SCALE), 0.18, 0.55, 0.88) : null; if (bloom) composer.addPass(bloom);
   composer.addPass(new OutputPass());
   const grade = new ShaderPass(GradeShader); composer.addPass(grade);   // display-referred colour grade: contrast, saturation, warm highlights, vignette
-  const smaa = new SMAAPass(size.x * pr, size.y * pr); composer.addPass(smaa);
-  return { composer, gtao, bloom, grade, resize(w, h) { composer.setSize(w, h); if (gtao) gtao.setSize(w * AO_SCALE, h * AO_SCALE); if (bloom) bloom.setSize(w, h); grade.uniforms.uAspect.value = w / h; } };
+  return { composer, gtao, bloom, grade, resize(w, h) { composer.setSize(w, h); if (gtao) gtao.setSize(w * AO_SCALE, h * AO_SCALE); if (bloom) bloom.setSize(w * BLOOM_SCALE, h * BLOOM_SCALE); grade.uniforms.uAspect.value = w / h; } };
 }
 export const worldTime = uTime;
