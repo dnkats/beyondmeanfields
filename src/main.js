@@ -14,9 +14,9 @@ const coarse = window.matchMedia && window.matchMedia('(pointer: coarse)').match
 const PRESETS = {
   // ao renders the scene a second time for normals, so it is only worth it once the geometry is cheap; shadows use a 40 m box around the player
   // lodNear / lodFar / impFar: full mesh, decimated mesh, billboard impostor (distance to the nearest tree of a cell)
-  high:   { high: true,  post: true,  ao: true,  bloom: true,  shadow: 2048, pr: 1.25, grass: 2600, trees: 1.0, lodNear: 40, lodFar: 110, impFar: 360, terrainN: 280 },
-  medium: { high: false, post: true,  ao: false, bloom: true,  shadow: 2048, pr: 1.0,  grass: 1600, trees: 0.7, lodNear: 28, lodFar: 80,  impFar: 360, terrainN: 200 },
-  low:    { high: false, post: false, ao: false, bloom: false, shadow: 1024, pr: 1.0,  grass: 800,  trees: 0.5, lodNear: 20, lodFar: 60,  impFar: 340, terrainN: 150 },
+  high:   { high: true,  post: true,  ao: true,  bloom: true,  shadow: 2048, pr: 1.25, grass: 8000, trees: 1.0, lodNear: 40, lodFar: 110, impFar: 420, terrainN: 400 },
+  medium: { high: false, post: true,  ao: false, bloom: true,  shadow: 2048, pr: 1.0,  grass: 5000, trees: 0.7, lodNear: 28, lodFar: 80,  impFar: 420, terrainN: 300 },
+  low:    { high: false, post: false, ao: false, bloom: false, shadow: 1024, pr: 1.0,  grass: 2500, trees: 0.5, lodNear: 20, lodFar: 60,  impFar: 400, terrainN: 220 },
 };
 function detectPreset() {
   const forced = new URLSearchParams(location.search).get('q') || localStorage.getItem('ci.quality'); if (forced && PRESETS[forced]) return forced;
@@ -40,7 +40,7 @@ SUN_DIR.set(Math.cos(HDRI_EL) * Math.cos(PHI), Math.sin(HDRI_EL), Math.cos(HDRI_
 const canvas = $('c');
 const renderer = createRenderer(canvas, quality); setRenderer(renderer); initTextureSupport(renderer);
 const scene = new THREE.Scene();
-const camera = new THREE.PerspectiveCamera(52, 1, 0.1, 600);
+const camera = new THREE.PerspectiveCamera(52, 1, 0.1, 900);
 const { sun } = createLights(scene, quality);
 const lights = createLightPool(scene, 10);
 let post = null;
@@ -52,11 +52,11 @@ async function build() {
   await buildTerrain(scene, quality);
   await buildWater(scene, hdr, SKY_ROT, quality);
   const forest = zoneById('forest'), marshZ = zoneById('marsh');
-  const T = quality.trees;
+  const T = quality.trees, TA = T * 4;   // TA for island-wide scatters: the island has four times the area it was designed with; zone-local scatters keep T
   // vegetation
   const jobs = [];
   // trees: Quaternius Stylized Nature MegaKit (CC0), 1.6-10k triangles each with solid leaf geometry; every type gets a billboard impostor for the distance
-  const tree = (name, n, opts, collide = 0.3) => jobs.push(scatterModel(scene, name, placements(Math.round(n * T), { zoneMargin: 1.3, ...opts }), { foliage: true, impostor: true, collide }));   // crowns stay clear of the zone rims so the camera is not buried in leaves
+  const tree = (name, n, opts, collide = 0.3) => jobs.push(scatterModel(scene, name, placements(Math.round(n * (opts.near ? T : TA)), { zoneMargin: 1.3, ...opts }), { foliage: true, impostor: true, collide }));   // crowns stay clear of the zone rims so the camera is not buried in leaves
   const ring = { near: { x: forest.x, z: forest.z, r0: 5, r1: 17 }, avoidZones: false, minDist: 3.6, exclude: [{ x: forest.x - 1, z: forest.z, r: 4 }] };
   tree('q_pine_1', 18, { ...ring, scale: [0.9, 1.4] }); tree('q_pine_3', 16, { ...ring, scale: [0.9, 1.3], seedOffset: 1 }); tree('q_tree_3', 12, { ...ring, scale: [0.9, 1.2], seedOffset: 2 });
   tree('q_pine_2', 24, { minDist: 4.5, scale: [0.9, 1.4], maxH: 8.5 }); tree('q_pine_4', 20, { minDist: 4.5, scale: [0.9, 1.3], maxH: 8.5, seedOffset: 3 }); tree('q_pine_5', 16, { minDist: 4.5, scale: [0.9, 1.3], maxH: 8.5, seedOffset: 4 });
@@ -66,16 +66,16 @@ async function build() {
   tree('q_dead_3', 7, { near: { x: marshZ.x, z: marshZ.z, r0: 5, r1: 20 }, avoidZones: false, minDist: 5, scale: [0.5, 0.7], minH: 0.7, seedOffset: 13 }, 0.4);   // the marsh is dead wood and pools
   tree('q_dead_1', 4, { near: { x: forest.x, z: forest.z, r0: 3, r1: 14 }, avoidZones: false, scale: [0.55, 0.75] }, 0.4); tree('q_dead_2', 4, { near: { x: forest.x, z: forest.z, r0: 3, r1: 14 }, avoidZones: false, scale: [0.55, 0.75], seedOffset: 10 }, 0.4);
   // undergrowth casts no shadows: it is small, plentiful, and the shadow pass was doubling the frame
-  jobs.push(scatterModel(scene, 'q_bush_flowers', placements(Math.round(150 * T), { scale: [0.6, 1.1], zoneMargin: 0.6, seedOffset: 11 }), { foliage: true, shadows: false }));   // the kit's plain bush is red-leaved; the flowering one is green
+  jobs.push(scatterModel(scene, 'q_bush_flowers', placements(Math.round(150 * TA), { scale: [0.6, 1.1], zoneMargin: 0.6, seedOffset: 11 }), { foliage: true, shadows: false }));   // the kit's plain bush is red-leaved; the flowering one is green
   jobs.push(scatterModel(scene, 'q_fern', placements(Math.round(110 * T), { near: { x: forest.x, z: forest.z, r0: 2, r1: 20 }, avoidZones: false, scale: [0.6, 1.0] }), { foliage: true, shadows: false }));
-  jobs.push(scatterModel(scene, 'q_flowers_3', placements(Math.round(40 * T), { near: { x: -20, z: 20, r0: 0, r1: 45 }, avoidZones: false, scale: [0.3, 0.5] }), { foliage: true, shadows: false }));
-  jobs.push(scatterModel(scene, 'q_flowers_4', placements(Math.round(30 * T), { near: { x: -20, z: 20, r0: 0, r1: 45 }, avoidZones: false, scale: [0.3, 0.5], seedOffset: 12 }), { foliage: true, shadows: false }));
-  jobs.push(scatterModel(scene, 'namaqualand_boulder_02', placements(30, { scale: [0.7, 1.5], maxSlope: 1.2, minH: 0.8, zoneMargin: 1.1, seedOffset: 7, sink: 0.5 }), { shadows: true, field: true }));   // boulder_01's scan cannot be simplified below 54k (seams), this one is 3.5k
-  jobs.push(scatterModel(scene, 'rock_moss_set_01', placements(30, { scale: [0.8, 1.6], maxSlope: 1.2, sink: 0.5 }), { shadows: true, field: true }));
-  jobs.push(scatterModel(scene, 'stone_01', placements(70, { scale: [0.6, 1.8], maxSlope: 1.5, minH: 0.6 }), { shadows: true }));
-  jobs.push(scatterModel(scene, 'coast_rocks_02', placements(22, { minH: 0.2, maxH: 1.2, maxSlope: 2, scale: [0.5, 1.0], zoneMargin: 1.4 }), { shadows: true, field: true }));
-  jobs.push(scatterModel(scene, 'namaqualand_boulder_02', placements(18, { near: { x: 36, z: -36, r0: 4, r1: 22 }, avoidZones: false, maxSlope: 1.5, scale: [0.6, 1.3], sink: 0.5 }), { shadows: true, field: true }));
-  jobs.push(scatterModel(scene, 'rock_face_01', placements(10, { near: { x: 0, z: -60, r0: 12, r1: 24 }, avoidZones: false, maxSlope: 3, minH: 3, scale: [0.6, 1.2], sink: 0.6 }), { shadows: true, field: true }));
+  jobs.push(scatterModel(scene, 'q_flowers_3', placements(Math.round(80 * T), { near: { x: -40, z: 40, r0: 0, r1: 90 }, avoidZones: false, scale: [0.3, 0.5] }), { foliage: true, shadows: false }));
+  jobs.push(scatterModel(scene, 'q_flowers_4', placements(Math.round(60 * T), { near: { x: -40, z: 40, r0: 0, r1: 90 }, avoidZones: false, scale: [0.3, 0.5], seedOffset: 12 }), { foliage: true, shadows: false }));
+  jobs.push(scatterModel(scene, 'namaqualand_boulder_02', placements(120, { scale: [0.7, 1.5], maxSlope: 1.2, minH: 0.8, zoneMargin: 1.1, seedOffset: 7, sink: 0.5 }), { shadows: true, field: true }));   // boulder_01's scan cannot be simplified below 54k (seams), this one is 3.5k
+  jobs.push(scatterModel(scene, 'rock_moss_set_01', placements(120, { scale: [0.8, 1.6], maxSlope: 1.2, sink: 0.5 }), { shadows: true, field: true }));
+  jobs.push(scatterModel(scene, 'stone_01', placements(280, { scale: [0.6, 1.8], maxSlope: 1.5, minH: 0.6 }), { shadows: true }));
+  jobs.push(scatterModel(scene, 'coast_rocks_02', placements(70, { minH: 0.2, maxH: 1.2, maxSlope: 2, scale: [0.5, 1.0], zoneMargin: 1.4 }), { shadows: true, field: true }));
+  jobs.push(scatterModel(scene, 'namaqualand_boulder_02', placements(18, { near: { x: zoneById('ridge').x, z: zoneById('ridge').z, r0: 4, r1: 22 }, avoidZones: false, maxSlope: 1.5, scale: [0.6, 1.3], sink: 0.5 }), { shadows: true, field: true }));
+  jobs.push(scatterModel(scene, 'rock_face_01', placements(10, { near: { x: zoneById('tower').x, z: zoneById('tower').z, r0: 12, r1: 24 }, avoidZones: false, maxSlope: 3, minH: 3, scale: [0.6, 1.2], sink: 0.6 }), { shadows: true, field: true }));
   jobs.push(scatterModel(scene, 'tree_stump_01', placements(14, { near: { x: forest.x, z: forest.z, r0: 3, r1: 16 }, avoidZones: false, scale: [0.8, 1.3] })));
   const grassPl = placements(quality.grass, { scale: [0.28, 0.5], zoneMargin: 0.35, maxSlope: 0.7, minH: 1.0 });   // the kit's blades are 1.3 m at scale 1: knee-high tufts, not reeds
   jobs.push(scatterModel(scene, 'q_grass_short', grassPl, { foliage: true, shadows: false, cullOnly: true }).then((ms) => ms.forEach((m) => windSway(m.material, 0.1))));
@@ -108,11 +108,11 @@ async function build() {
   props.push(lighthouse(scene, cp.x, cp.z - 6, cp.h), placeModel(scene, 'painted_wooden_bench', cp.x + 5, cp.z + 3, { rot: -0.7 }), placeModel(scene, 'street_lamp_01', cp.x - 4, cp.z + 4, {}), placeModel(scene, 'wooden_crate_01', cp.x + 3, cp.z - 2, { rot: 0.3 }));
   // Localization Lagoon: the boatyard by the pond, with a pinnace hauled into it
   props.push(cottage(scene, lg.x - 6, lg.z + 5, { w: 5.4, d: 4.4, rot: 0.9, roof: 'reed_roof_03', wall: 'brown_planks_09', timber: false }), placeModel(scene, 'wooden_barrels_01', lg.x + 3, lg.z + 6, { rot: 1.1 }), placeModel(scene, 'wooden_crate_01', lg.x + 5, lg.z + 4, { rot: 0.4 }), placeModel(scene, 'wooden_crate_01', lg.x + 5.8, lg.z + 5.2, { rot: 1.2 }),
-    placeModel(scene, 'wooden_ladder', lg.x - 3, lg.z - 4, { rot: 2.0 }).then((o) => { o.position.y += 1.1; }), placeModel(scene, 'wooden_lantern_01', lg.x + 1, lg.z - 3, {}), placeModel(scene, 'wooden_stool_01', lg.x + 2, lg.z - 1, {}),
-    placeModel(scene, 'ship_pinnace', -86, -24, { y: WATER_Y - 0.25, rot: 2.2, scale: 0.16, onGround: false }));
+    placeModel(scene, 'wooden_ladder', lg.x - 8.5, lg.z + 8.5, { rot: 0.9 }).then((o) => { o.position.y += 1.1; }), placeModel(scene, 'wooden_lantern_01', lg.x + 1, lg.z - 3, {}), placeModel(scene, 'wooden_stool_01', lg.x + 2, lg.z - 1, {}),
+    placeModel(scene, 'ship_pinnace', lg.x - 12, lg.z - 16, { y: WATER_Y - 0.25, rot: 2.2, scale: 0.16, onGround: false }));
   // Transcorrelated Marsh: a fire, lanterns on poles, kit rocks at the pools
   props.push(placeModel(scene, 'stone_fire_pit', ms.x + 2, ms.z + 4, {}), placeModel(scene, 'wooden_lantern_01', ms.x - 4, ms.z - 2, {}), placeModel(scene, 'wooden_lantern_01', ms.x + 7, ms.z - 5, {}), placeModel(scene, 'wooden_ladder', ms.x - 6, ms.z + 5, { rot: 0.4 }).then((o) => { o.position.y += 1.1; }), placeModel(scene, 'wooden_bucket_01', ms.x + 3, ms.z + 6, {}));
-  [[84, -28, 1.4], [78, -40, 1.2], [90, -38, 1.1], [56, -34, 1.3], [66, -44, 1.0], [64, -33, 0.9]].forEach(([x, z, s], i) => props.push(placeModel(scene, `q_rock_${1 + (i % 3)}`, x, z, { rot: i * 1.3, scale: s })));
+  [[12, -6, 1.4], [6, -18, 1.2], [18, -16, 1.1], [-16, -12, 1.3], [-6, -22, 1.0], [-8, -11, 0.9]].forEach(([dx, dz, s], i) => props.push(placeModel(scene, `q_rock_${1 + (i % 3)}`, ms.x + dx, ms.z + dz, { rot: i * 1.3, scale: s })));
   // waystones: one per zone, fast travel between the ones you have stood next to
   const WAYSTONES = { harbor: [-8, -6], fields: [8, 8], bazaar: [-7, 7], forest: [8, -4], caves: [-6, -6], ridge: [-7, 6], tower: [-7, 8], lagoon: [7, -6], marsh: [-8, 6], cape: [-6, -6] };
   const waystones = Object.entries(WAYSTONES).map(([id, [dx, dz]]) => { const zn = zoneById(id); const w = waystone(scene, zn.x + dx, zn.z + dz); w.userData.zone = id; return w; });

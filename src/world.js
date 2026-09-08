@@ -36,32 +36,37 @@ export const srand = () => { seed = (seed * 1664525 + 1013904223) >>> 0; return 
 
 // ------------------------------------------------------------ zones & terrain function
 /** Island half-axes (m): east-west, north (z < 0) and south (z > 0); the south coast stays at the harbour. The terrain plane is `size` wide. */
-export const ISLAND = { a: 118, bN: 108, bS: 84, size: 270 };
-/** Normalised distance from the island centre: 1 is the coast. */
-export const islandR = (x, z) => Math.hypot(x / ISLAND.a, z / (z > 0 ? ISLAND.bS : ISLAND.bN));
+export const ISLAND = { a: 236, bN: 216, bS: 170, size: 540 };   // the coast sits at about 0.78 of a half-axis
+/** Normalised distance from the island centre (1 is the coast), with bays and headlands from two low harmonics of the bearing. */
+export const islandR = (x, z) => { const a = Math.atan2(z, x); return Math.hypot(x / ISLAND.a, z / (z > 0 ? ISLAND.bS : ISLAND.bN)) * (1 + 0.05 * Math.sin(a * 5 + 1.3) + 0.035 * Math.sin(a * 11 + 0.4)); };
 export const ZONES = [
-  { id: 'harbor', name: 'Input Harbor',        x: 0,   z: 58,  r: 14, h: 1.6 },
-  { id: 'fields', name: 'Hartree–Fock Fields', x: -46, z: 22,  r: 17, h: 2.4 },
-  { id: 'bazaar', name: 'Basis Bazaar',        x: 2,   z: 8,   r: 13, h: 2.8 },
-  { id: 'forest', name: 'Correlation Forest',  x: -36, z: -30, r: 15, h: 3.2 },
-  { id: 'caves',  name: 'FCIDUMP Caves',       x: 46,  z: 12,  r: 14, h: 3.0 },
-  { id: 'ridge',  name: 'Open-Shell Ridge',    x: 36,  z: -36, r: 14, h: 6.5 },
-  { id: 'tower',  name: 'Tower of (T)',        x: 0,   z: -60, r: 13, h: 9.5 },
-  { id: 'lagoon', name: 'Localization Lagoon', x: -74, z: -8,  r: 13, h: 1.5 },
-  { id: 'marsh',  name: 'Transcorrelated Marsh', x: 72, z: -22, r: 14, h: 1.3 },
-  { id: 'cape',   name: 'Convergence Cape',    x: -58, z: 54,  r: 13, h: 4.5 },
+  { id: 'harbor', name: 'Input Harbor',        x: 0,    z: 132,  r: 14, h: 1.6 },
+  { id: 'fields', name: 'Hartree–Fock Fields', x: -92,  z: 44,   r: 17, h: 2.4 },
+  { id: 'bazaar', name: 'Basis Bazaar',        x: 4,    z: 16,   r: 13, h: 2.8 },
+  { id: 'forest', name: 'Correlation Forest',  x: -72,  z: -60,  r: 15, h: 3.2 },
+  { id: 'caves',  name: 'FCIDUMP Caves',       x: 92,   z: 24,   r: 14, h: 3.0 },
+  { id: 'ridge',  name: 'Open-Shell Ridge',    x: 72,   z: -72,  r: 14, h: 6.5 },
+  { id: 'tower',  name: 'Tower of (T)',        x: 0,    z: -120, r: 13, h: 9.5 },
+  { id: 'lagoon', name: 'Localization Lagoon', x: -148, z: -16,  r: 13, h: 1.5 },
+  { id: 'marsh',  name: 'Transcorrelated Marsh', x: 144, z: -44, r: 14, h: 1.3 },
+  { id: 'cape',   name: 'Convergence Cape',    x: -116, z: 108,  r: 13, h: 4.5 },
+];
+const Z = Object.fromEntries(ZONES.map((z) => [z.id, z]));
+/** Landmarks of the height function, tied to the zones: hills (h > 0) and ponds (h < 0) with a Gaussian footprint of variance s. */
+const RELIEF = [
+  { x: Z.tower.x, z: Z.tower.z, h: 9, s: 520 }, { x: Z.ridge.x, z: Z.ridge.z, h: 5, s: 420 }, { x: Z.caves.x, z: Z.caves.z, h: 2.5, s: 300 },
+  { x: Z.cape.x, z: Z.cape.z, h: 4, s: 420 },                                                     // the headland of Convergence Cape
+  { x: Z.lagoon.x - 12, z: Z.lagoon.z - 16, h: -5.5, s: 130 },                                     // the lagoon: a pond behind the boatyard
+  { x: Z.marsh.x + 12, z: Z.marsh.z - 14, h: -2.6, s: 70 }, { x: Z.marsh.x - 12, z: Z.marsh.z - 18, h: -2.4, s: 60 },   // marsh pools
 ];
 export const zoneById = (id) => ZONES.find((z) => z.id === id);
 export const WATER_Y = 0.45;
 export function terrainH(x, z) {
   const rr = islandR(x, z);
-  const island = clamp(1 - rr * rr * rr * rr, 0, 1);
+  const island = clamp(1 - rr ** 6, 0, 1);   // a steeper coast than the quartic gave on the doubled island
   let h = island * (2.6 + 1.5 * Math.sin(x * 0.06) * Math.cos(z * 0.05) + 0.9 * Math.sin(x * 0.15 + 1) * Math.sin(z * 0.12) + 0.5 * Math.sin(x * 0.31) * Math.cos(z * 0.27) + 0.18 * Math.sin(x * 0.9) * Math.cos(z * 0.8))
-        + island * (9 * Math.exp(-(x * x + (z + 60) * (z + 60)) / 520) + 5 * Math.exp(-((x - 36) ** 2 + (z + 36) ** 2) / 420) + 2.5 * Math.exp(-((x - 46) ** 2 + (z - 12) ** 2) / 300)
-                    + 4 * Math.exp(-((x + 58) ** 2 + (z - 54) ** 2) / 420))   // the headland of Convergence Cape
-        - 5.5 * Math.exp(-((x + 86) ** 2 + (z + 24) ** 2) / 130)                 // the lagoon: a pond behind the boatyard
-        - 2.6 * Math.exp(-((x - 84) ** 2 + (z + 36) ** 2) / 70) - 2.4 * Math.exp(-((x - 60) ** 2 + (z + 40) ** 2) / 60)   // marsh pools
         - 3.2 * (1 - island);
+  for (const f of RELIEF) { const d2 = (x - f.x) ** 2 + (z - f.z) ** 2; if (d2 < f.s * 12) h += (f.h > 0 ? island : 1) * f.h * Math.exp(-d2 / f.s); }
   for (const zn of ZONES) { const d = Math.hypot(x - zn.x, z - zn.z); if (d < zn.r) h = lerp(zn.h, h, smooth(zn.r * 0.55, zn.r, d)); }
   return h;
 }
@@ -186,14 +191,14 @@ export async function setupSky(scene, hdriRotationY) {
   scene.background = hdr; scene.environment = hdr;
   scene.backgroundRotation.set(0, hdriRotationY, 0); scene.environmentRotation.set(0, hdriRotationY, 0);
   scene.environmentIntensity = 0.7; scene.backgroundIntensity = 1.0;
-  scene.fog = new THREE.Fog(0xd3dfee, 80, 300);
+  scene.fog = new THREE.Fog(0xd3dfee, 90, 380);
   return hdr;
 }
 
 // ------------------------------------------------------------ terrain mesh with PBR splat shader
 const uTime = { value: 0 };
 export function heightTexture() {
-  const N = 256, data = new Uint16Array(N * N), S = ISLAND.size;
+  const N = 512, data = new Uint16Array(N * N), S = ISLAND.size;
   for (let j = 0; j < N; j++) for (let i = 0; i < N; i++) data[j * N + i] = THREE.DataUtils.toHalfFloat(terrainH((i / (N - 1) - 0.5) * S, (j / (N - 1) - 0.5) * S));
   const t = new THREE.DataTexture(data, N, N, THREE.RedFormat, THREE.HalfFloatType); t.minFilter = t.magFilter = THREE.LinearFilter; t.needsUpdate = true; return t;
 }
@@ -238,7 +243,7 @@ export async function buildTerrain(scene, quality) {
         vec4 fD = texture2D(tF, uvF), fN = texture2D(tFN, uvF), fA = texture2D(tFA, uvF);
         vec4 sD = texture2D(tS, uvS), sN = vec4(0.5, 0.5, 1.0, 1.0), sA = vec4(1.0);   // sand is flat: no normal or AO map
         float wRock = clamp(smoothstep(0.22, 0.5, slope) + smoothstep(8.6, 10.6, h), 0.0, 1.0);
-        float wSand = 1.0 - smoothstep(0.85, 1.6, h);
+        float wSand = 1.0 - smoothstep(0.6, 1.1, h);   // sand only on the last metres before the water
         float dF = distance(vWPos.xz, uForest); float wForest = (1.0 - smoothstep(uForestR * 0.6, uForestR * 1.1, dF)) * smoothstep(0.15, 0.6, 0.5 + 0.5 * sin(vWPos.x * 0.7) * cos(vWPos.z * 0.6) + gA.r * 0.4);
         float wSnow = smoothstep(12.0, 13.4, h);
         vec4 D = mix(gD, fD, wForest), Nm = mix(gN, fN, wForest), Am = mix(gA, fA, wForest);
@@ -261,7 +266,7 @@ export async function buildTerrain(scene, quality) {
 // ------------------------------------------------------------ water
 export async function buildWater(scene, hdr, hdriRotationY, quality) {
   const normals = await loadTexture('textures/waternormals.jpg', { repeat: 1 });
-  const geo = new THREE.PlaneGeometry(800, 800, quality.high ? 200 : 80, quality.high ? 200 : 80);
+  const geo = new THREE.PlaneGeometry(1600, 1600, quality.high ? 240 : 100, quality.high ? 240 : 100);
   const fog = scene.fog;
   const mat = new THREE.ShaderMaterial({ transparent: true, depthWrite: false,
     uniforms: { uTime, tN: { value: normals }, tSky: { value: hdr }, tH: { value: heightTexture() }, uSkyRot: { value: hdriRotationY }, uSunDir: { value: SUN_DIR },
@@ -309,7 +314,7 @@ const LOD_GROUPS = [];
  * Instances `parts` at `placements`, split into spatial cells so frustum culling works per cell, with an optional
  * low-detail `lodParts` set for distant cells (switched in updateLOD). `cullOnly` groups (grass) simply vanish beyond the near range.
  */
-export function scatterParts(scene, parts, placements, { shadows = true, lodParts = null, cell = 30, cullOnly = false, collide = 0, field = null, name = '', impostor = null } = {}) {
+export function scatterParts(scene, parts, placements, { shadows = true, lodParts = null, cell = 40, cullOnly = false, collide = 0, field = null, name = '', impostor = null } = {}) {
   if (collide) for (const pl of placements) addCircle(pl.x, pl.z, collide * pl.s);
   if (field) for (const pl of placements) addField(field, pl.x, pl.z, pl.rot, pl.s, pl.y);
   const cells = new Map();
@@ -410,7 +415,7 @@ export async function conifierParts(kind = 'pine_tree_01', { height = 14, tiers 
   const foliage = mergeGeometries(cards, false); foliage.computeVertexNormals();
   return [{ geometry: trunk, material: trunkMat }, { geometry: foliage, material: twigMat }];
 }
-export function placements(count, { minH = 1.2, maxH = 8.5, maxSlope = 0.6, avoidZones = true, zoneMargin = 0.95, near = null, minDist = 0, scale = [0.9, 1.3], seedOffset = 0, exclude = [], sink = 0 } = {}) {
+export function placements(count, { minH = 0.95, maxH = 8.5, maxSlope = 0.6, avoidZones = true, zoneMargin = 0.95, near = null, minDist = 0, scale = [0.9, 1.3], seedOffset = 0, exclude = [], sink = 0 } = {}) {
   const out = []; let tries = 0;
   while (out.length < count && tries < count * 40) {
     tries++;

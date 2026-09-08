@@ -27,24 +27,24 @@ const VIEWS = {
   forge2: { setup: "__dbg.goto('bazaar', -2, 8); __dbg.game.unlock(['dfmp2','ccsd','dcsd']); __dbg.game.P.hotbar[2] = { spell: 'dcsd', opts: { extra: 'cc maxit=100 shiftp=0.5\\ndiis maxdiis=10', basis: 'vdz; O=avdz' } }; __dbg.game.showForge(); setTimeout(() => { const d = document.querySelector('.opthelp details'); if (d) d.open = true; }, 100)", wait: 1500, dom: true },
   bazaarbench: { setup: "__dbg.goto('bazaar', -2, 8); __dbg.cam(0, 0.3, 6)", wait: 3000 },
   vista:  { setup: "__dbg.goto('bazaar', 0, 2); __dbg.cam(3.14, 0.5, 12)", wait: 3500 },
-  panorama: { setup: "__dbg.goto('harbor', 0, 6); __dbg.freeCam(10, 30, 120, -10, 2, -30)", wait: 3500 },   // the whole island from the sea off the harbour: far trees are impostors
-  impostors: { setup: "__dbg.quality.lodNear = 3; __dbg.quality.lodFar = 4; __dbg.goto('forest', 2, 6); __dbg.freeCam(-36 + 14, 4, -30 + 22, -36, 5, -30)", wait: 2500 },   // every tree beyond 4 m is an impostor
-  impostors_mesh: { setup: "__dbg.quality.lodNear = 300; __dbg.quality.lodFar = 400; __dbg.goto('forest', 2, 6); __dbg.freeCam(-36 + 14, 4, -30 + 22, -36, 5, -30)", wait: 2500 },   // the same view with full meshes, for comparison
+  panorama: { setup: "__dbg.goto('harbor', 0, 6); __dbg.freeCam(20, 45, 220, -10, 2, -60)", wait: 3500 },   // the island from the sea off the harbour: far trees are impostors
+  impostors: { setup: "__dbg.quality.lodNear = 3; __dbg.quality.lodFar = 4; __dbg.goto('forest', 2, 6); __dbg.freeCam(-72 + 14, 4, -60 + 22, -72, 5, -60)", wait: 2500 },   // every tree beyond 4 m is an impostor
+  impostors_mesh: { setup: "__dbg.quality.lodNear = 300; __dbg.quality.lodFar = 400; __dbg.goto('forest', 2, 6); __dbg.freeCam(-72 + 14, 4, -60 + 22, -72, 5, -60)", wait: 2500 },   // the same view with full meshes, for comparison
   atlas: { setup: "__dbg.goto('tower', 0, 9); __dbg.freeCam(0, 40, -60, 0, 40, -120); window.__atlas = __dbg.showAtlas(process_env_ATLAS)".replace('process_env_ATLAS', JSON.stringify(process.env.ATLAS || 'fir_sapling_medium')), wait: 1500, probe: 'window.__atlas' },
   lagoon: { setup: "__dbg.goto('lagoon', 0, 8); __dbg.cam(0.3, 0.3, 9)", wait: 3000 },
   marsh:  { setup: "__dbg.goto('marsh', 0, 8); __dbg.cam(-0.3, 0.3, 9)", wait: 3000 },
   cape:   { setup: "__dbg.goto('cape', 0, 8); __dbg.cam(0.2, 0.28, 10)", wait: 3000 },
-  island: { setup: "__dbg.goto('harbor', 0, 6); __dbg.freeCam(20, 70, 190, -10, 0, -20)", wait: 3000 },   // the whole island from high above the harbour
+  island: { setup: "__dbg.goto('harbor', 0, 6); __dbg.freeCam(40, 150, 380, -10, 0, -40)", wait: 3000 },   // the whole island from high above the harbour
   // eye-level views (1.7 m above the ground) to check that props and vegetation sit on the terrain
-  eye_harbor: { setup: "const z = __dbg.game.QUESTS && [0, 58]; __dbg.goto('harbor', 0, 6); __dbg.freeCam(-10, __dbg.terrainH(-10, 52) + 1.7, 52, 6, __dbg.terrainH(6, 60) + 1.2, 60)", wait: 2500 },
-  eye_bazaar: { setup: "__dbg.goto('bazaar', 0, 2); __dbg.freeCam(12, __dbg.terrainH(12, 14) + 1.7, 14, -4, __dbg.terrainH(-4, 6) + 1.0, 6)", wait: 2500 },
-  eye_fields: { setup: "__dbg.goto('fields', 0, 6); __dbg.freeCam(-32, __dbg.terrainH(-32, 30) + 1.7, 30, -50, __dbg.terrainH(-50, 20) + 1.0, 20)", wait: 2500 },
-  eye_forest: { setup: "__dbg.goto('forest', 2, 6); __dbg.freeCam(-24, __dbg.terrainH(-24, -22) + 1.7, -22, -40, __dbg.terrainH(-40, -32) + 1.0, -32)", wait: 2500 },
-  eye_wild: { setup: "__dbg.goto('bazaar', 0, 2); __dbg.freeCam(-20, __dbg.terrainH(-20, -5) + 1.7, -5, -60, __dbg.terrainH(-60, 10) + 1.0, 10)", wait: 2500 },
-  eye_cape: { setup: "__dbg.goto('cape', 0, 8); __dbg.freeCam(-44, __dbg.terrainH(-44, 46) + 1.7, 46, -60, __dbg.terrainH(-60, 56) + 1.0, 56)", wait: 2500 },
-  eye_sea: { setup: "__dbg.goto('harbor', 0, 6); __dbg.freeCam(10, __dbg.terrainH(10, 96) + 2.0, 96, 4, 1.0, 66)", wait: 2500 },   // the harbour seen from the sea side
-  eye_far: { setup: "__dbg.goto('bazaar', 0, 2); __dbg.freeCam(2, __dbg.terrainH(2, 20) + 1.7, 20, 0, 3.0, -60)", wait: 2500 },   // from the bazaar toward the tower: mid trees are LOD meshes, far ones impostors
-  treeline: { setup: "__dbg.goto('bazaar', 0, 2); __dbg.freeCam(2, 6, 30, -36, 6, -30)", wait: 3500 },   // the forest from the bazaar, 60-90 m away: LOD meshes and impostors side by side
+  eye_harbor: { setup: "__dbg.goto('harbor', 0, 6); __dbg.freeCam(-10, __dbg.terrainH(-10, 112) + 1.7, 112, 6, __dbg.terrainH(6, 120) + 1.2, 120)", wait: 2500 },
+  eye_bazaar: { setup: "__dbg.goto('bazaar', 0, 2); __dbg.freeCam(14, __dbg.terrainH(14, 22) + 1.7, 22, -2, __dbg.terrainH(-2, 14) + 1.0, 14)", wait: 2500 },
+  eye_fields: { setup: "__dbg.goto('fields', 0, 6); __dbg.freeCam(-78, __dbg.terrainH(-78, 52) + 1.7, 52, -96, __dbg.terrainH(-96, 42) + 1.0, 42)", wait: 2500 },
+  eye_forest: { setup: "__dbg.goto('forest', 2, 6); __dbg.freeCam(-60, __dbg.terrainH(-60, -52) + 1.7, -52, -76, __dbg.terrainH(-76, -62) + 1.0, -62)", wait: 2500 },
+  eye_wild: { setup: "__dbg.goto('bazaar', 0, 2); __dbg.freeCam(-40, __dbg.terrainH(-40, -10) + 1.7, -10, -120, __dbg.terrainH(-120, 20) + 1.0, 20)", wait: 2500 },
+  eye_cape: { setup: "__dbg.goto('cape', 0, 8); __dbg.freeCam(-102, __dbg.terrainH(-102, 100) + 1.7, 100, -118, __dbg.terrainH(-118, 110) + 1.0, 110)", wait: 2500 },
+  eye_sea: { setup: "__dbg.goto('harbor', 0, 6); __dbg.freeCam(10, 2.0, 160, 4, 1.0, 126)", wait: 2500 },   // the harbour seen from the sea side
+  eye_far: { setup: "__dbg.goto('bazaar', 0, 2); __dbg.freeCam(4, __dbg.terrainH(4, 28) + 1.7, 28, 0, 3.0, -120)", wait: 2500 },   // from the bazaar toward the tower: mid trees are LOD meshes, far ones impostors
+  treeline: { setup: "__dbg.goto('bazaar', 0, 2); __dbg.freeCam(4, 6, 40, -72, 6, -60)", wait: 3500 },   // the forest from the bazaar, about 100 m away: LOD meshes and impostors side by side
 };
 const names = process.argv.slice(2).length ? process.argv.slice(2) : ['title', 'harbor'];
 mkdirSync('shots', { recursive: true });
