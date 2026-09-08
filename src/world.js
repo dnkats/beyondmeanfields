@@ -35,8 +35,10 @@ let seed = 20260905;
 export const srand = () => { seed = (seed * 1664525 + 1013904223) >>> 0; return seed / 4294967296; };
 
 // ------------------------------------------------------------ zones & terrain function
-/** Island half-axes (m) and the size of the terrain plane; the coast is where the quartic falloff meets the water. */
-export const ISLAND = { a: 118, b: 108, size: 270 };
+/** Island half-axes (m): east-west, north (z < 0) and south (z > 0); the south coast stays at the harbour. The terrain plane is `size` wide. */
+export const ISLAND = { a: 118, bN: 108, bS: 84, size: 270 };
+/** Normalised distance from the island centre: 1 is the coast. */
+export const islandR = (x, z) => Math.hypot(x / ISLAND.a, z / (z > 0 ? ISLAND.bS : ISLAND.bN));
 export const ZONES = [
   { id: 'harbor', name: 'Input Harbor',        x: 0,   z: 58,  r: 14, h: 1.6 },
   { id: 'fields', name: 'Hartree–Fock Fields', x: -46, z: 22,  r: 17, h: 2.4 },
@@ -47,16 +49,16 @@ export const ZONES = [
   { id: 'tower',  name: 'Tower of (T)',        x: 0,   z: -60, r: 13, h: 9.5 },
   { id: 'lagoon', name: 'Localization Lagoon', x: -74, z: -8,  r: 13, h: 1.5 },
   { id: 'marsh',  name: 'Transcorrelated Marsh', x: 72, z: -22, r: 14, h: 1.3 },
-  { id: 'cape',   name: 'Convergence Cape',    x: -40, z: 78,  r: 13, h: 4.5 },
+  { id: 'cape',   name: 'Convergence Cape',    x: -58, z: 54,  r: 13, h: 4.5 },
 ];
 export const zoneById = (id) => ZONES.find((z) => z.id === id);
 export const WATER_Y = 0.45;
 export function terrainH(x, z) {
-  const rr = Math.hypot(x / ISLAND.a, z / ISLAND.b);
+  const rr = islandR(x, z);
   const island = clamp(1 - rr * rr * rr * rr, 0, 1);
   let h = island * (2.6 + 1.5 * Math.sin(x * 0.06) * Math.cos(z * 0.05) + 0.9 * Math.sin(x * 0.15 + 1) * Math.sin(z * 0.12) + 0.5 * Math.sin(x * 0.31) * Math.cos(z * 0.27) + 0.18 * Math.sin(x * 0.9) * Math.cos(z * 0.8))
         + island * (9 * Math.exp(-(x * x + (z + 60) * (z + 60)) / 520) + 5 * Math.exp(-((x - 36) ** 2 + (z + 36) ** 2) / 420) + 2.5 * Math.exp(-((x - 46) ** 2 + (z - 12) ** 2) / 300)
-                    + 4 * Math.exp(-((x + 40) ** 2 + (z - 78) ** 2) / 420))   // the headland of Convergence Cape
+                    + 4 * Math.exp(-((x + 58) ** 2 + (z - 54) ** 2) / 420))   // the headland of Convergence Cape
         - 5.5 * Math.exp(-((x + 86) ** 2 + (z + 24) ** 2) / 130)                 // the lagoon: a pond behind the boatyard
         - 2.6 * Math.exp(-((x - 84) ** 2 + (z + 36) ** 2) / 70) - 2.4 * Math.exp(-((x - 60) ** 2 + (z + 40) ** 2) / 60)   // marsh pools
         - 3.2 * (1 - island);
@@ -413,7 +415,7 @@ export function placements(count, { minH = 1.2, maxH = 8.5, maxSlope = 0.6, avoi
     tries++;
     let x, z;
     if (near) { const a = srand() * 6.283, r = near.r0 + srand() * (near.r1 - near.r0); x = near.x + Math.cos(a) * r; z = near.z + Math.sin(a) * r; }
-    else { x = (srand() * 2 - 1) * ISLAND.a; z = (srand() * 2 - 1) * ISLAND.b; }
+    else { x = (srand() * 2 - 1) * ISLAND.a; z = (srand() * 2 - 1) * ISLAND.bN; }
     const h = terrainH(x, z); if (h < minH || h > maxH || slopeAt(x, z) > maxSlope) continue;
     if (avoidZones && ZONES.some((zn) => Math.hypot(x - zn.x, z - zn.z) < zn.r * zoneMargin)) continue;
     if (exclude.some((e) => Math.hypot(x - e.x, z - e.z) < e.r)) continue;

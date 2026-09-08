@@ -35,6 +35,15 @@ const VIEWS = {
   marsh:  { setup: "__dbg.goto('marsh', 0, 8); __dbg.cam(-0.3, 0.3, 9)", wait: 3000 },
   cape:   { setup: "__dbg.goto('cape', 0, 8); __dbg.cam(0.2, 0.28, 10)", wait: 3000 },
   island: { setup: "__dbg.goto('harbor', 0, 6); __dbg.freeCam(20, 70, 190, -10, 0, -20)", wait: 3000 },   // the whole island from high above the harbour
+  // eye-level views (1.7 m above the ground) to check that props and vegetation sit on the terrain
+  eye_harbor: { setup: "const z = __dbg.game.QUESTS && [0, 58]; __dbg.goto('harbor', 0, 6); __dbg.freeCam(-10, __dbg.terrainH(-10, 52) + 1.7, 52, 6, __dbg.terrainH(6, 60) + 1.2, 60)", wait: 2500 },
+  eye_bazaar: { setup: "__dbg.goto('bazaar', 0, 2); __dbg.freeCam(12, __dbg.terrainH(12, 14) + 1.7, 14, -4, __dbg.terrainH(-4, 6) + 1.0, 6)", wait: 2500 },
+  eye_fields: { setup: "__dbg.goto('fields', 0, 6); __dbg.freeCam(-32, __dbg.terrainH(-32, 30) + 1.7, 30, -50, __dbg.terrainH(-50, 20) + 1.0, 20)", wait: 2500 },
+  eye_forest: { setup: "__dbg.goto('forest', 2, 6); __dbg.freeCam(-24, __dbg.terrainH(-24, -22) + 1.7, -22, -40, __dbg.terrainH(-40, -32) + 1.0, -32)", wait: 2500 },
+  eye_wild: { setup: "__dbg.goto('bazaar', 0, 2); __dbg.freeCam(-20, __dbg.terrainH(-20, -5) + 1.7, -5, -60, __dbg.terrainH(-60, 10) + 1.0, 10)", wait: 2500 },
+  eye_cape: { setup: "__dbg.goto('cape', 0, 8); __dbg.freeCam(-44, __dbg.terrainH(-44, 46) + 1.7, 46, -60, __dbg.terrainH(-60, 56) + 1.0, 56)", wait: 2500 },
+  eye_sea: { setup: "__dbg.goto('harbor', 0, 6); __dbg.freeCam(10, __dbg.terrainH(10, 96) + 2.0, 96, 4, 1.0, 66)", wait: 2500 },   // the harbour seen from the sea side
+  eye_far: { setup: "__dbg.goto('bazaar', 0, 2); __dbg.freeCam(2, __dbg.terrainH(2, 20) + 1.7, 20, 0, 3.0, -60)", wait: 2500 },   // from the bazaar toward the tower: mid trees are LOD meshes, far ones impostors
   treeline: { setup: "__dbg.goto('bazaar', 0, 2); __dbg.freeCam(2, 6, 30, -36, 6, -30)", wait: 3500 },   // the forest from the bazaar, 60-90 m away: LOD meshes and impostors side by side
 };
 const names = process.argv.slice(2).length ? process.argv.slice(2) : ['title', 'harbor'];
