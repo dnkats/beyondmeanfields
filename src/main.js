@@ -71,8 +71,8 @@ async function build() {
   jobs.push(scatterModel(scene, 'q_flowers_3', placements(Math.round(80 * T), { near: { x: -40, z: 40, r0: 0, r1: 90 }, avoidZones: false, scale: [0.3, 0.5] }), { foliage: true, shadows: false }));
   jobs.push(scatterModel(scene, 'q_flowers_4', placements(Math.round(60 * T), { near: { x: -40, z: 40, r0: 0, r1: 90 }, avoidZones: false, scale: [0.3, 0.5], seedOffset: 12 }), { foliage: true, shadows: false }));
   jobs.push(scatterModel(scene, 'namaqualand_boulder_02', placements(120, { scale: [0.7, 1.5], maxSlope: 1.2, minH: 0.8, zoneMargin: 1.1, seedOffset: 7, sink: 0.5 }), { shadows: true, field: true }));   // boulder_01's scan cannot be simplified below 54k (seams), this one is 3.5k
-  jobs.push(scatterModel(scene, 'rock_moss_set_01', placements(120, { scale: [0.8, 1.6], maxSlope: 1.2, sink: 0.5 }), { shadows: true, field: true }));
-  jobs.push(scatterModel(scene, 'stone_01', placements(280, { scale: [0.6, 1.8], maxSlope: 1.5, minH: 0.6 }), { shadows: true }));
+  jobs.push(scatterModel(scene, 'rock_moss_set_01', placements(120, { scale: [0.8, 1.6], maxSlope: 1.2, sink: 0.5, zoneMargin: 1.3 }), { shadows: true, field: true }));   // rock sets stay off the zone rims and the paths to piers
+  jobs.push(scatterModel(scene, 'stone_01', placements(280, { scale: [0.6, 1.8], maxSlope: 1.5, minH: 0.6, zoneMargin: 1.3 }), { shadows: true }));
   jobs.push(scatterModel(scene, 'coast_rocks_02', placements(70, { minH: 0.2, maxH: 1.2, maxSlope: 2, scale: [0.5, 1.0], zoneMargin: 1.4 }), { shadows: true, field: true }));
   jobs.push(scatterModel(scene, 'namaqualand_boulder_02', placements(18, { near: { x: zoneById('ridge').x, z: zoneById('ridge').z, r0: 4, r1: 22 }, avoidZones: false, maxSlope: 1.5, scale: [0.6, 1.3], sink: 0.5 }), { shadows: true, field: true }));
   jobs.push(scatterModel(scene, 'rock_face_01', placements(10, { near: { x: zoneById('tower').x, z: zoneById('tower').z, r0: 12, r1: 24 }, avoidZones: false, maxSlope: 3, minH: 3, scale: [0.6, 1.2], sink: 0.6 }), { shadows: true, field: true }));
