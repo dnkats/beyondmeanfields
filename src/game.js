@@ -14,7 +14,7 @@ const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
 function storage(key, val) { try { if (val === undefined) return localStorage.getItem(key); localStorage.setItem(key, val); } catch (e) { return null; } }
 const esc = (s) => String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;');
 
-export function createGame({ scene, camera, canvas, playerChar, npcs, alpaca, renderFrame, quality, sun, workbench, sigils, lights, waystones = [] }) {
+export function createGame({ scene, camera, canvas, playerChar, npcs, alpaca, renderFrame, quality, sun, workbench, sigils, lights, waystones = [], archiveDoor = null }) {
   const el = {}; ['hud', 'zone', 'hpbar', 'hpval', 'xpbar', 'xpval', 'manabar', 'manaval', 'qtitle', 'qobj', 'items', 'compass', 'prompt', 'toast', 'dlg', 'dsw', 'dname', 'dtext', 'dcode', 'dchoices', 'dnext', 'overlay', 'panel', 'bossbar', 'bosshp', 'bossname', 'keys', 'hotbar', 'enc', 'encname', 'encformula', 'enctells', 'enchp', 'encres', 'crosshair'].forEach((k) => (el[k] = $(k)));
 
   // ---------------- input
@@ -538,12 +538,15 @@ export function createGame({ scene, camera, canvas, playerChar, npcs, alpaca, re
         const canTower = questAvailable(QUESTS[7]) && Q.dragon === 0 && P.items.includes('key');
         const nearBench = workbench && workbench.position.distanceTo(P.pos) < 3 && Q.fitting >= 3;
         const nearStone = waystones.find((w) => w.position.distanceTo(P.pos) < 2.6);
+        const nearArchive = archiveDoor && archiveDoor.position.distanceTo(P.pos) < 2.8;
         if (near && !near.alpaca) { el.prompt.textContent = `E · Talk to ${near.name}`; el.prompt.classList.add('show');
           if (input.act) { const main = MAIN_NPC.has(near.id) ? npcNode(near.id) : null; const mainOpen = main && !main.endsWith('done'); const sq = sqForNpc(near.id);
             if (mainOpen) showDialog(main); else if (sq) showDialog(sqNode(sq)); else showDialog(main ? main : { who: near.id, text: MAIN_NPC.has(near.id) ? 'Not yet. Someone else on the island needs you first. Check the quest log with J.' : 'Nothing for you today. Come back when you have learned more spells.' }); } }
         else if (canTower && doorD < 7) { el.prompt.textContent = 'E · Unlock the Tower of (T)'; el.prompt.classList.add('show'); if (input.act) showDialog('boss0'); }
         else if (nearBench) { el.prompt.textContent = 'E · Craft spells at the jlmol workbench'; el.prompt.classList.add('show'); if (input.act) showForge(); }
         else if (nearStone) { el.prompt.textContent = 'E · Waystone: travel'; el.prompt.classList.add('show'); if (input.act) showTravel(nearStone); }
+        else if (nearArchive) { el.prompt.textContent = 'E · The Keeper\'s archive'; el.prompt.classList.add('show');
+          if (input.act) showDialog({ who: 'keeper', text: Object.keys(P.solved).length ? `The archive. Every input that converged on this island is filed behind this door: ${Object.keys(P.solved).length} so far. Read them if you like.` : 'The archive. Every input that converges on this island is filed behind this door. Yours is still empty.', run: () => { if (Object.keys(P.solved).length) showLore(); } }); }
         else el.prompt.classList.remove('show');
         input.attack = input.act = input.bolt = false; input.cast = 0;
       }

@@ -44,6 +44,9 @@ const VIEWS = {
   eye_cape: { setup: "__dbg.goto('cape', 0, 8); __dbg.freeCam(-102, __dbg.terrainH(-102, 100) + 1.7, 100, -118, __dbg.terrainH(-118, 110) + 1.0, 110)", wait: 2500 },
   eye_sea: { setup: "__dbg.goto('harbor', 0, 6); __dbg.freeCam(10, 2.0, 160, 4, 1.0, 126)", wait: 2500 },   // the harbour seen from the sea side
   eye_far: { setup: "__dbg.goto('bazaar', 0, 2); __dbg.freeCam(4, __dbg.terrainH(4, 28) + 1.7, 28, 0, 3.0, -120)", wait: 2500 },   // from the bazaar toward the tower: mid trees are LOD meshes, far ones impostors
+  caves_door: { setup: "__dbg.goto('caves', 0, 6); const c = {x: 92, z: 24}; __dbg.freeCam(c.x + 2, __dbg.terrainH(c.x + 2, c.z + 6) + 1.8, c.z + 6, c.x + 6.6, __dbg.terrainH(c.x + 6.6, c.z - 3.9) + 1.3, c.z - 3.9)", wait: 2500 },
+  fields_ladder: { setup: "__dbg.goto('fields', 0, 6); const c = {x: -92, z: 44}; __dbg.freeCam(c.x + 16, __dbg.terrainH(c.x + 16, c.z + 6) + 1.8, c.z + 6, c.x + 11.5, __dbg.terrainH(c.x + 11.5, c.z + 1) + 1.5, c.z + 1)", wait: 2500 },
+  bazaar_table: { setup: "__dbg.goto('bazaar', 0, 6); const c = {x: 4, z: 16}; __dbg.freeCam(c.x + 1, __dbg.terrainH(c.x + 1, c.z + 8) + 1.6, c.z + 8, c.x - 2, __dbg.terrainH(c.x - 2, c.z + 4) + 0.9, c.z + 4)", wait: 2500 },
   treeline: { setup: "__dbg.goto('bazaar', 0, 2); __dbg.freeCam(4, 6, 40, -72, 6, -60)", wait: 3500 },   // the forest from the bazaar, about 100 m away: LOD meshes and impostors side by side
 };
 const names = process.argv.slice(2).length ? process.argv.slice(2) : ['title', 'harbor'];
