@@ -20,15 +20,18 @@ export function bakeImpostor(renderer, parts, sunDir, { views = 8, size = 256, e
   const rt = new THREE.WebGLRenderTarget(size * views, size, { type: THREE.HalfFloatType, generateMipmaps: true, minFilter: THREE.LinearMipmapLinearFilter, magFilter: THREE.LinearFilter, depthBuffer: true });
   rt.texture.colorSpace = THREE.LinearSRGBColorSpace; rt.texture.wrapS = rt.texture.wrapT = THREE.ClampToEdgeWrapping; rt.texture.anisotropy = 4;
   const prev = { target: renderer.getRenderTarget(), tone: renderer.toneMapping, autoClear: renderer.autoClear, shadow: renderer.shadowMap.enabled };
-  renderer.toneMapping = THREE.NoToneMapping; renderer.shadowMap.enabled = false; renderer.setRenderTarget(rt); renderer.setClearColor(0x000000, 0); renderer.clear();
+  const prevClear = renderer.getClearColor(new THREE.Color()), prevAlpha = renderer.getClearAlpha();
+  renderer.toneMapping = THREE.NoToneMapping; renderer.shadowMap.enabled = false; renderer.setClearColor(0x000000, 0);
+  renderer.setRenderTarget(rt); renderer.clear();
   for (let v = 0; v < views; v++) {
     const a = (v / views) * Math.PI * 2;
     cam.position.set(cx + Math.sin(a) * w * 2, h / 2, cz + Math.cos(a) * w * 2); cam.lookAt(cx, h / 2, cz); cam.updateProjectionMatrix();
-    renderer.setViewport(v * size, 0, size, size); renderer.setScissor(v * size, 0, size, size); renderer.setScissorTest(true);
+    // the target's own viewport and scissor are in texels; renderer.setViewport would be scaled by the pixel ratio
+    rt.viewport.set(v * size, 0, size, size); rt.scissor.set(v * size, 0, size, size); rt.scissorTest = true; renderer.setRenderTarget(rt);
     renderer.render(mini, cam);
   }
-  renderer.setScissorTest(false); renderer.setRenderTarget(prev.target); renderer.toneMapping = prev.tone; renderer.shadowMap.enabled = prev.shadow;
-  const s = renderer.getSize(new THREE.Vector2()); renderer.setViewport(0, 0, s.x, s.y); renderer.setScissor(0, 0, s.x, s.y);
+  rt.scissorTest = false; rt.viewport.set(0, 0, size * views, size); rt.scissor.set(0, 0, size * views, size);
+  renderer.setRenderTarget(prev.target); renderer.toneMapping = prev.tone; renderer.shadowMap.enabled = prev.shadow; renderer.setClearColor(prevClear, prevAlpha);
   return { tex: rt.texture, w, h, views, cx, cz };
 }
 

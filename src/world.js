@@ -207,14 +207,15 @@ export async function buildTerrain(scene, quality) {
   const mat = new THREE.MeshStandardMaterial({ roughness: 1, metalness: 0, envMapIntensity: 0.6 });
   const forestZ = zoneById('forest');
   mat.onBeforeCompile = (sh) => {
+    // Sampler budget: integrated GPUs have 16 fragment texture units, and the environment map and the shadow map take two of them.
+    // Eleven here (sand and the meadow reuse the grass normal / AO maps), so the program links everywhere.
     Object.assign(sh.uniforms, { tG: { value: grass.map }, tGN: { value: grass.normalMap }, tGA: { value: grass.aoMap }, tF: { value: forest.map }, tFN: { value: forest.normalMap }, tFA: { value: forest.aoMap },
-      tS: { value: sand.map }, tSN: { value: sand.normalMap }, tSA: { value: sand.aoMap }, tR: { value: rock.map }, tRN: { value: rock.normalMap }, tRA: { value: rock.aoMap },
-      tM: { value: meadow.map }, tMN: { value: meadow.normalMap }, tMA: { value: meadow.aoMap },
+      tS: { value: sand.map }, tR: { value: rock.map }, tRN: { value: rock.normalMap }, tRA: { value: rock.aoMap }, tM: { value: meadow.map },
       uForest: { value: new THREE.Vector2(forestZ.x, forestZ.z) }, uForestR: { value: forestZ.r } });
     sh.vertexShader = 'varying vec3 vWPos; varying vec3 vWNormal;\n' + sh.vertexShader
       .replace('#include <begin_vertex>', '#include <begin_vertex>\n vWPos = (modelMatrix * vec4(transformed, 1.0)).xyz;')
       .replace('#include <beginnormal_vertex>', '#include <beginnormal_vertex>\n vWNormal = normalize(mat3(modelMatrix) * objectNormal);');
-    sh.fragmentShader = `varying vec3 vWPos; varying vec3 vWNormal; uniform sampler2D tG, tGN, tGA, tF, tFN, tFA, tS, tSN, tSA, tR, tRN, tRA, tM, tMN, tMA; uniform vec2 uForest; uniform float uForestR;
+    sh.fragmentShader = `varying vec3 vWPos; varying vec3 vWNormal; uniform sampler2D tG, tGN, tGA, tF, tFN, tFA, tS, tR, tRN, tRA, tM; uniform vec2 uForest; uniform float uForestR;
       vec3 gTN; vec4 gTA;
       // value noise for the large-scale variation (two octaves are enough at 30-100 m wavelengths)
       float thash(vec2 p) { return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453); }
@@ -231,11 +232,11 @@ export async function buildTerrain(scene, quality) {
         vec4 gD = texture2D(tG, uvG), gN = texture2D(tGN, uvG), gA = texture2D(tGA, uvG);
         // meadow patches: a second grass set blended in by low-frequency noise, and the tile itself sampled at a second scale to break the repeat
         float macro = tnoise(vWPos.xz * 0.035) * 0.65 + tnoise(vWPos.xz * 0.09) * 0.35;
-        vec2 uvM = vWPos.xz * 0.12; vec4 mD = texture2D(tM, uvM), mN = texture2D(tMN, uvM), mA = texture2D(tMA, uvM);
+        vec2 uvM = vWPos.xz * 0.12; vec4 mD = texture2D(tM, uvM);
         float wMeadow = 0.7 * smoothstep(0.45, 0.65, macro);
-        gD = mix(gD, mD, wMeadow); gN = mix(gN, mN, wMeadow); gA = mix(gA, mA, wMeadow);
+        gD = mix(gD, mD, wMeadow);   // the meadow keeps the grass normal and AO
         vec4 fD = texture2D(tF, uvF), fN = texture2D(tFN, uvF), fA = texture2D(tFA, uvF);
-        vec4 sD = texture2D(tS, uvS), sN = texture2D(tSN, uvS), sA = texture2D(tSA, uvS);
+        vec4 sD = texture2D(tS, uvS), sN = vec4(0.5, 0.5, 1.0, 1.0), sA = vec4(1.0);   // sand is flat: no normal or AO map
         float wRock = clamp(smoothstep(0.22, 0.5, slope) + smoothstep(8.6, 10.6, h), 0.0, 1.0);
         float wSand = 1.0 - smoothstep(0.85, 1.6, h);
         float dF = distance(vWPos.xz, uForest); float wForest = (1.0 - smoothstep(uForestR * 0.6, uForestR * 1.1, dF)) * smoothstep(0.15, 0.6, 0.5 + 0.5 * sin(vWPos.x * 0.7) * cos(vWPos.z * 0.6) + gA.r * 0.4);
